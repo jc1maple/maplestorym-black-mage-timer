@@ -3561,39 +3561,39 @@
   "baseline_replay": {
     "available": true,
     "url": "/api/baseline-video",
-    "name": "-O4WH-sTv4w - 拳霸老黑.mp4",
-    "video_duration_s": 1655.667,
+    "name": "UxH_aFs8aa0 - 【楓之谷M】開箱陰陽師 老黑視角傑尼斯陰陽師",
+    "video_duration_s": 2045.467,
     "phase_hints": {
       "P1": {
-        "cutscene_start_s": 0.0,
-        "matched_video_s": 0.0,
-        "estimated_hud_s": 4.68,
-        "gate_start_s": 4.68,
-        "template": "ui_structure_hidden_to_hud",
-        "score": 1.0
+        "cutscene_start_s": 249.017,
+        "matched_video_s": 249.017,
+        "estimated_hud_s": 255.133,
+        "gate_start_s": 255.133,
+        "template": "P1_offset_0301f.png",
+        "score": 0.826714
       },
       "P2": {
-        "cutscene_start_s": 153.72,
-        "matched_video_s": 153.72,
-        "estimated_hud_s": 163.44,
-        "gate_start_s": 163.44,
-        "template": "ui_structure_hidden_to_hud",
-        "score": 1.0
+        "cutscene_start_s": 413.8,
+        "matched_video_s": 413.8,
+        "estimated_hud_s": 421.633,
+        "gate_start_s": 421.633,
+        "template": "P2_global_zeSCL_offset_0120f.png",
+        "score": 0.772471
       },
       "P3": {
-        "cutscene_start_s": 552.943369,
-        "matched_video_s": 552.943369,
-        "estimated_hud_s": 557.96,
-        "gate_start_s": 557.96,
+        "cutscene_start_s": 821.05,
+        "matched_video_s": 821.05,
+        "estimated_hud_s": 825.967,
+        "gate_start_s": 825.967,
         "template": "P3_offset_0145f.png",
-        "score": 0.960024
+        "score": 0.936391
       },
       "P4": {
-        "cutscene_start_s": 1011.8,
-        "matched_video_s": 1011.8,
-        "estimated_hud_s": 1012.52,
-        "gate_start_s": 1012.52,
-        "template": "ui_structure_hidden_to_white_hud",
+        "cutscene_start_s": 1309.833,
+        "matched_video_s": 1309.833,
+        "estimated_hud_s": 1310.6,
+        "gate_start_s": 1310.6,
+        "template": "short_transition_to_white_hud",
         "score": 1.0
       }
     },
