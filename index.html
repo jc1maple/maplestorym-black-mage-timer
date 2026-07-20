@@ -1892,6 +1892,11 @@
       appendStoredCustomCues(data);
       editorState.customSkillTexts = new Set(readStoredCustomSkills());
       state.assets = data;
+      els.editorYoutubeInput.value = localStorage.getItem(EDITOR_YOUTUBE_KEY) || DEFAULT_EDITOR_YOUTUBE_URL;
+      initializeEditorData(data);
+      loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
+        els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+      });
       for (const phase of PHASE_ORDER) {
         state.timelineByPhase[phase] = data.timeline
           .filter((cue) => cue.enabled && !cue.deleted && cue.phase === phase)
@@ -1906,7 +1911,6 @@
       state.volume = Number(localStorage.getItem("blackMageWeb2Volume") || 1);
       state.audioMuted = localStorage.getItem("blackMageWeb2Muted") === "true";
       editorState.voiceEnabled = localStorage.getItem("blackMageEditorVoiceEnabled") !== "false";
-      els.editorYoutubeInput.value = localStorage.getItem(EDITOR_YOUTUBE_KEY) || DEFAULT_EDITOR_YOUTUBE_URL;
       els.thresholdInput.value = state.threshold.toFixed(2);
       els.leadInput.value = state.extraLeadS.toFixed(1);
       els.volumeInput.value = Math.round(state.volume * 100);
@@ -1917,10 +1921,6 @@
       els.topStatus.textContent = `模板 ${count}，語音 ${data.timeline_enabled_count} 句`;
       renderPhaseCards();
       renderTimeline();
-      initializeEditorData(data);
-      loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
-        els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
-      });
       els.editorBaselineBtn.hidden = true;
       updateAudioStatus();
       startTicker();
