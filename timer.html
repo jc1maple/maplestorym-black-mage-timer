@@ -595,10 +595,10 @@
   <main id="editorView" class="editorView">
     <section>
       <div class="editorToolbar">
-        <button id="editorBaselineBtn" class="primary">載入基準影片</button>
+        <button id="editorBaselineBtn" class="primary" hidden>載入基準影片</button>
         <input id="editorYoutubeInput" class="youtubeUrlInput" type="url" inputmode="url" value="https://youtu.be/-O4WH-sTv4w" aria-label="YouTube 影片網址" placeholder="貼上 YouTube 影片網址">
-        <button id="editorYoutubeBtn">載入 YouTube</button>
-        <button id="editorDetectPhasesBtn">自動校正階段</button>
+        <button id="editorYoutubeBtn" hidden>載入 YouTube</button>
+        <button id="editorDetectPhasesBtn" hidden>自動校正階段</button>
         <span id="editorVideoName" class="muted">尚未載入影片</span>
         <span id="editorPhaseStatus" class="muted">等待影片</span>
       </div>
@@ -788,6 +788,8 @@
       youtubeState: -1,
       captureStream: null,
       captureEnded: false,
+      pendingCaptureRequest: null,
+      autoDetectAfterYoutubeReady: false,
       titleBeforeScan: "",
     };
 
@@ -1916,9 +1918,10 @@
       renderPhaseCards();
       renderTimeline();
       initializeEditorData(data);
-      loadEditorBaseline();
-      const hasBaseline = Boolean(data.baseline_replay?.available);
-      els.editorBaselineBtn.hidden = !hasBaseline;
+      loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
+        els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+      });
+      els.editorBaselineBtn.hidden = true;
       updateAudioStatus();
       startTicker();
       log(`載入完成：模板 ${count}，提示 ${data.timeline_enabled_count} 句`, "ok");
@@ -2344,7 +2347,20 @@
       els.editorModeBtn.setAttribute("aria-selected", String(editing));
       if (editing) {
         if (state.running || state.stream || state.activePhase || state.pending || els.video.currentSrc) stopSource();
-        if (!editorHasSource()) loadEditorBaseline();
+        if (!editorHasSource()) {
+          loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
+            els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+          });
+        } else if (editorUsesYoutube() && !editorUsesBaselineYoutube()
+          && Object.keys(editorState.hudTimes).length !== PHASE_ORDER.length) {
+          editorState.autoDetectAfterYoutubeReady = true;
+          requestEditorYoutubeCapture();
+          if (editorState.youtubeReady) {
+            autoDetectEditorPhases().catch((error) => {
+              els.editorPhaseStatus.textContent = `偵測失敗：${error.message}`;
+            });
+          }
+        }
         if (editorState.voiceEnabled) startAudioLoading();
         renderEditor();
       } else {
@@ -2521,6 +2537,33 @@
       els.editorYoutubeWrap.replaceChildren(host);
     }
 
+    function stopPendingEditorCapture(except = null) {
+      const request = editorState.pendingCaptureRequest;
+      if (!request || request === except) return;
+      editorState.pendingCaptureRequest = null;
+      request.then(({ stream }) => {
+        if (stream) for (const track of stream.getTracks()) track.stop();
+      });
+    }
+
+    function requestEditorDisplayMedia() {
+      return navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30, max: 60 } },
+        audio: false,
+        preferCurrentTab: true,
+        selfBrowserSurface: "include",
+        surfaceSwitching: "exclude",
+      }).then((stream) => ({ stream, error: null }), (error) => ({ stream: null, error }));
+    }
+
+    function requestEditorYoutubeCapture() {
+      if (!navigator.mediaDevices?.getDisplayMedia) return null;
+      if (editorState.pendingCaptureRequest) return editorState.pendingCaptureRequest;
+      els.editorPhaseStatus.textContent = "請選擇分享這個分頁，選取後會自動校正";
+      editorState.pendingCaptureRequest = requestEditorDisplayMedia();
+      return editorState.pendingCaptureRequest;
+    }
+
     function clearEditorPhaseAnchors(message = "等待偵測階段") {
       editorState.detectionToken += 1;
       editorState.detecting = false;
@@ -2537,6 +2580,8 @@
 
     function loadEditorBaseline() {
       editorPause();
+      stopPendingEditorCapture();
+      editorState.autoDetectAfterYoutubeReady = false;
       editorState.sourceMode = "baseline";
       destroyEditorYoutubePlayer();
       setEditorSourceSurface("baseline");
@@ -2556,13 +2601,16 @@
       els.editorVideoName.textContent = editorState.sourceName;
     }
 
-    async function loadEditorYoutube(rawUrl) {
+    async function loadEditorYoutube(rawUrl, { autoDetect = false, captureRequest = null } = {}) {
       const videoId = parseYoutubeVideoId(rawUrl);
       if (!videoId) {
         setEditorStatus("YouTube 網址格式不正確", "dirty");
         els.editorPhaseStatus.textContent = "無法辨識 YouTube 影片";
         return;
       }
+      stopPendingEditorCapture(captureRequest);
+      editorState.pendingCaptureRequest = captureRequest;
+      editorState.autoDetectAfterYoutubeReady = Boolean(autoDetect);
       editorPause();
       editorState.sourceMode = "youtube";
       destroyEditorYoutubePlayer();
@@ -2599,13 +2647,19 @@
               els.editorDetectPhasesBtn.disabled = false;
               resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
               if (editorUsesBaselineYoutube()) {
+                editorState.autoDetectAfterYoutubeReady = false;
                 applyEditorPhaseAnchors(
                   state.assets?.baseline_replay?.phase_hints || {},
                   {},
                   "已套用基準 YouTube 校正",
                 );
+              } else if (editorState.autoDetectAfterYoutubeReady && editorState.pendingCaptureRequest) {
+                els.editorPhaseStatus.textContent = "YouTube 已載入，正在自動校正階段";
+                autoDetectEditorPhases().catch((error) => {
+                  els.editorPhaseStatus.textContent = `偵測失敗：${error.message}`;
+                });
               } else {
-                els.editorPhaseStatus.textContent = "YouTube 已載入，可自動校正階段";
+                els.editorPhaseStatus.textContent = "YouTube 已載入；貼上連結後會自動校正";
                 renderEditor();
               }
             },
@@ -2633,6 +2687,24 @@
       }
     }
 
+    function loadEditorYoutubeFromUserAction(rawUrl) {
+      const videoId = parseYoutubeVideoId(rawUrl);
+      const baselineId = parseYoutubeVideoId(DEFAULT_EDITOR_YOUTUBE_URL);
+      if (videoId && videoId === editorState.youtubeVideoId) {
+        if (videoId === baselineId || editorState.detecting
+          || Object.keys(editorState.hudTimes).length === PHASE_ORDER.length) {
+          return Promise.resolve();
+        }
+        editorState.autoDetectAfterYoutubeReady = true;
+        requestEditorYoutubeCapture();
+        return editorState.youtubeReady ? autoDetectEditorPhases() : Promise.resolve();
+      }
+      const captureRequest = videoId && videoId !== baselineId
+        ? requestEditorYoutubeCapture()
+        : null;
+      return loadEditorYoutube(rawUrl, { autoDetect: true, captureRequest });
+    }
+
     function delay(ms) {
       return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
@@ -2655,19 +2727,13 @@
       editorState.titleBeforeScan = document.title;
       document.body.classList.add("youtube-scan-active");
       document.title = "請分享目前分頁 · 黑魔法師自動校正";
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: 30, max: 60 } },
-          audio: false,
-          preferCurrentTab: true,
-          selfBrowserSurface: "include",
-          surfaceSwitching: "exclude",
-        });
-      } catch (error) {
+      const pendingRequest = editorState.pendingCaptureRequest;
+      editorState.pendingCaptureRequest = null;
+      const { stream, error } = await (pendingRequest || requestEditorDisplayMedia());
+      if (error || !stream) {
         document.body.classList.remove("youtube-scan-active");
         document.title = editorState.titleBeforeScan || "黑魔法師招式提示機";
-        throw new Error(error?.name === "NotAllowedError" ? "未分享目前分頁，無法自動校正" : error.message);
+        throw new Error(error?.name === "NotAllowedError" ? "未分享目前分頁，無法自動校正" : (error?.message || "無法取得分頁畫面"));
       }
       if (token !== editorState.detectionToken) {
         for (const track of stream.getTracks()) track.stop();
@@ -3847,11 +3913,31 @@
       els.volumeInput.addEventListener("input", applySettings);
       els.muteInput.addEventListener("change", applySettings);
       els.editorBaselineBtn.addEventListener("click", loadEditorBaseline);
-      els.editorYoutubeBtn.addEventListener("click", () => loadEditorYoutube(els.editorYoutubeInput.value));
+      els.editorYoutubeBtn.addEventListener("click", () => {
+        loadEditorYoutubeFromUserAction(els.editorYoutubeInput.value).catch((error) => {
+          els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+        });
+      });
+      els.editorYoutubeInput.addEventListener("paste", (event) => {
+        const pasted = String(event.clipboardData?.getData("text/plain") || "").trim();
+        if (!parseYoutubeVideoId(pasted)) return;
+        event.preventDefault();
+        els.editorYoutubeInput.value = pasted;
+        loadEditorYoutubeFromUserAction(pasted).catch((error) => {
+          els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+        });
+      });
+      els.editorYoutubeInput.addEventListener("change", () => {
+        loadEditorYoutubeFromUserAction(els.editorYoutubeInput.value).catch((error) => {
+          els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+        });
+      });
       els.editorYoutubeInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
-        loadEditorYoutube(els.editorYoutubeInput.value);
+        loadEditorYoutubeFromUserAction(els.editorYoutubeInput.value).catch((error) => {
+          els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+        });
       });
       els.editorDetectPhasesBtn.addEventListener("click", () => autoDetectEditorPhases());
       els.editorVideo.addEventListener("loadeddata", handleEditorVideoLoaded);
