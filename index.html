@@ -1,0 +1,3978 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>黑魔法師招式提示機</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0e1013;
+      --panel: #171a1f;
+      --panel2: #111419;
+      --line: #303741;
+      --text: #eef2f6;
+      --muted: #a9b3bf;
+      --ok: #75d48b;
+      --warn: #ffd166;
+      --bad: #ff8d8d;
+      --accent: #7fb2ff;
+      font-family: "Segoe UI", "Microsoft JhengHei", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    button, input, select {
+      font: inherit;
+      color: var(--text);
+      background: #202630;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: #6f8198; }
+    button.primary { background: #1f5134; border-color: #48a66b; }
+    button.warn { background: #4c3c1f; border-color: #8a6f35; }
+    button.bad { background: #572426; border-color: #a2474b; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    input[type="range"] { width: 130px; padding: 0; }
+    input[type="number"] { width: 78px; }
+    header {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #101318;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    h1 { font-size: 20px; margin: 0 12px 0 0; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(480px, 1.15fr) minmax(360px, .85fr);
+      gap: 12px;
+      padding: 12px;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .metric {
+      background: var(--panel2);
+      border: 1px solid #252b34;
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 58px;
+    }
+    .label { color: var(--muted); font-size: 12px; }
+    .value {
+      margin-top: 4px;
+      font-weight: 750;
+      font-size: 18px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ok { color: var(--ok); }
+    .warnText { color: var(--warn); }
+    .badText { color: var(--bad); }
+    .videoBox {
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #050608;
+      border: 1px solid #252b34;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    video { width: 100%; height: 100%; object-fit: contain; background: #050608; }
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .currentCallout {
+      font-size: 28px;
+      font-weight: 850;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+    .nextCallout {
+      color: var(--muted);
+      font-size: 16px;
+      min-height: 26px;
+      margin-bottom: 12px;
+    }
+    .phaseGrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 8px 0 12px;
+    }
+    .phaseCard {
+      border: 1px solid #2b333e;
+      background: #101419;
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .phaseCard strong { display: block; font-size: 18px; }
+    .phaseCard span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .phaseCard.active { border-color: #48a66b; }
+    .phaseCard.detected { border-color: #8a6f35; }
+    .settings {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+    .manual {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 8px 0;
+    }
+    .log {
+      height: 260px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font: 12px/1.45 Consolas, "Microsoft JhengHei", monospace;
+      color: #d7dde6;
+      background: #0b0d10;
+      border: 1px solid #252b34;
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .timeline {
+      height: 330px;
+      overflow: auto;
+      border: 1px solid #252b34;
+      border-radius: 6px;
+      background: #0b0d10;
+    }
+    .cueRow {
+      display: grid;
+      grid-template-columns: 52px 64px 1fr;
+      gap: 8px;
+      padding: 6px 8px;
+      border-bottom: 1px solid #222832;
+      font-size: 13px;
+    }
+    .cueRow.played { color: var(--ok); }
+    .cueRow.next { color: var(--warn); background: #211b0e; }
+    .modeSwitch {
+      display: inline-flex;
+      padding: 3px;
+      gap: 3px;
+      background: #080a0d;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+    }
+    .modeSwitch button { border: 0; background: transparent; padding: 6px 10px; }
+    .modeSwitch button.active { background: #2b3440; color: #fff; }
+    .headerSpacer { flex: 1; }
+    .prompterPanel {
+      --signal: #79d7ff;
+      background: #020304;
+      border: 5px solid var(--signal);
+      border-radius: 8px;
+      min-height: 390px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: inset 0 0 0 2px #000;
+      overflow: hidden;
+    }
+    .prompterPanel[data-urgency="soon"] { --signal: #ffd166; }
+    .prompterPanel[data-urgency="critical"] {
+      --signal: #ff4545;
+      background: #220507;
+      animation: criticalPulse .7s ease-in-out infinite;
+    }
+    .prompterPanel[data-urgency="now"] {
+      --signal: #fff;
+      color: #fff;
+      background: #a60016;
+    }
+    @keyframes criticalPulse {
+      50% { box-shadow: inset 0 0 0 5px rgba(255,255,255,.4); }
+    }
+    .prompterHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      color: var(--signal);
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .prompterMain {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px;
+      align-items: center;
+      gap: 18px;
+      min-height: 220px;
+    }
+    .prompterLabel { color: var(--signal); font-size: 18px; font-weight: 850; }
+    .prompterMove {
+      font-size: 72px;
+      line-height: 1.05;
+      font-weight: 950;
+      word-break: break-word;
+      text-wrap: balance;
+      margin-top: 8px;
+    }
+    .prompterCountdown {
+      color: var(--signal);
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      min-width: 0;
+    }
+    .prompterSeconds { display: block; font-size: 112px; line-height: .9; font-weight: 950; }
+    .prompterPanel[data-urgency="now"] .prompterSeconds { font-size: 72px; }
+    .prompterUnit { display: block; margin-top: 10px; font-size: 22px; font-weight: 850; }
+    .prompterFollowing {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      border-top: 1px solid #343a42;
+      padding-top: 10px;
+      min-height: 58px;
+    }
+    .followingCue {
+      display: grid;
+      grid-template-columns: 62px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      color: #dce3ea;
+      font-size: 16px;
+      font-weight: 700;
+      min-width: 0;
+    }
+    .followingCue strong { color: var(--warn); font-size: 20px; font-variant-numeric: tabular-nums; }
+    .followingCue span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .currentCallout, .nextCallout { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    #logSection { grid-column: 1 / -1; }
+    body.focus-prompter main { display: block; padding: 8px; }
+    body.focus-prompter #captureSection,
+    body.focus-prompter #logSection,
+    body.focus-prompter #phaseCards,
+    body.focus-prompter #timeline { display: none; }
+    body.focus-prompter #calloutSection { border: 0; padding: 0; background: #000; }
+    body.focus-prompter .prompterPanel { min-height: calc(100vh - 84px); border-width: 8px; }
+    body.focus-prompter .prompterMove { font-size: 92px; }
+    body.focus-prompter .prompterSeconds { font-size: 144px; }
+    body.editor-mode #liveView,
+    body:not(.editor-mode) #editorView,
+    body.editor-mode .liveControl,
+    body.editor-mode #prompterFocusBtn { display: none; }
+    .editorView {
+      grid-template-columns: minmax(520px, 1.05fr) minmax(480px, .95fr);
+      align-items: start;
+    }
+    .editorToolbar, .editorTransport, .editorPhaseTabs, .editorActions, .editorFields {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .editorToolbar { margin-bottom: 10px; }
+    .youtubeUrlInput { flex: 1 1 330px; min-width: 260px; }
+    .editorVideoBox {
+      aspect-ratio: 16 / 9;
+      background: #050608;
+      border: 1px solid #303741;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    .editorVideoBox video { display: block; }
+    .editorVideoBox > [hidden] { display: none !important; }
+    .editorYoutubeWrap, .editorYoutubeWrap iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    .editorCaptureVideo {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      width: 1px !important;
+      height: 1px !important;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+    body.youtube-scan-active { overflow: hidden; background: #000; }
+    body.youtube-scan-active > header,
+    body.youtube-scan-active > main:not(#editorView),
+    body.youtube-scan-active #editorView > section:nth-child(2),
+    body.youtube-scan-active #editorView > section:first-child > :not(.editorVideoBox) { display: none !important; }
+    body.youtube-scan-active #editorView {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      padding: 0;
+    }
+    body.youtube-scan-active #editorView > section:first-child {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #000;
+    }
+    body.youtube-scan-active .editorVideoBox {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      width: 100vw;
+      height: 100vh;
+      aspect-ratio: auto;
+      border: 0;
+      border-radius: 0;
+    }
+    .editorTransport { margin-top: 10px; }
+    .editorVoiceToggle { display: inline-flex; gap: 6px; align-items: center; color: var(--text); font-weight: 750; }
+    .editorClock { font-size: 24px; font-weight: 850; font-variant-numeric: tabular-nums; min-width: 132px; }
+    .editorPhaseTabs { margin-top: 14px; }
+    .editorPhaseTabs button { flex: 1 1 130px; min-width: 120px; font-variant-numeric: tabular-nums; }
+    .editorPhaseTabs button.active { background: #1f5134; border-color: #48a66b; }
+    .phaseAlignment {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #303741;
+    }
+    .phaseAlignment input, .editorFields input[type="number"] { width: 112px; }
+    .skillCreator { margin-top: 12px; padding-top: 12px; border-top: 1px solid #303741; }
+    .skillCreator h2 { margin: 0 0 9px; font-size: 15px; }
+    .editorNewSkillInput { flex: 1 1 220px; min-width: 0; }
+    .editorSkillLibrary { display: flex; flex-wrap: wrap; gap: 6px; max-height: 142px; overflow: auto; }
+    .skillChip { display: inline-flex; min-width: 0; }
+    .skillChip .skillUse { border-radius: 5px 0 0 5px; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .skillChip:not(.customSkill) .skillUse { border-radius: 5px; }
+    .skillChip .skillRemove { width: 30px; padding: 0; border-left: 0; border-radius: 0 5px 5px 0; color: #ff9b9b; font-size: 17px; }
+    .editorActions { justify-content: space-between; margin-bottom: 10px; }
+    .editorStatus { color: var(--muted); font-weight: 700; }
+    .editorStatus.dirty { color: var(--warn); }
+    .editorStatus.saved { color: var(--ok); }
+    #editorSubmitBtn { min-width: 104px; }
+    .feedbackDialog {
+      width: min(460px, calc(100vw - 28px));
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      background: #151a22;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
+    }
+    .feedbackDialog::backdrop { background: rgba(0, 0, 0, .72); }
+    .feedbackForm { display: grid; gap: 14px; padding: 18px; }
+    .feedbackForm h2 { margin: 0; font-size: 19px; }
+    .feedbackForm label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
+    .feedbackForm input, .feedbackForm textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      color: var(--text);
+      background: var(--panel2);
+      font: inherit;
+    }
+    .feedbackForm textarea { min-height: 88px; resize: vertical; }
+    .feedbackSummary { color: var(--cyan); font-weight: 800; }
+    .feedbackStatus { min-height: 20px; color: var(--muted); }
+    .feedbackDialogActions { display: flex; justify-content: flex-end; gap: 8px; }
+    .selectedCue {
+      border-top: 1px solid #303741;
+      border-bottom: 1px solid #303741;
+      padding: 12px 0;
+      margin-bottom: 10px;
+    }
+    .selectedCueName { font-size: 26px; line-height: 1.2; font-weight: 900; margin-bottom: 10px; word-break: break-word; }
+    .editorFields label { color: var(--muted); font-size: 13px; }
+    .editorFields .textField { flex: 1 1 240px; }
+    .editorFields .textField input { width: 100%; }
+    .editorFields label > span { display: block; margin-bottom: 4px; }
+    .editorFields .checkField { display: flex; gap: 6px; align-items: center; padding-top: 18px; }
+    .editorRailViewport {
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: #090b0e;
+      border: 1px solid #303741;
+      border-radius: 6px;
+      height: 106px;
+      margin-bottom: 10px;
+    }
+    .editorRail { position: relative; height: 104px; min-width: 100%; }
+    .railTick { position: absolute; top: 0; bottom: 0; border-left: 1px solid #303741; color: #929dab; font-size: 11px; padding-left: 4px; }
+    .railCue {
+      position: absolute;
+      top: 42px;
+      width: 9px;
+      height: 44px;
+      padding: 0;
+      border-radius: 2px;
+      border: 1px solid #9eafc2;
+      background: #49637e;
+      transform: translateX(-4px);
+    }
+    .railCue.selected { width: 15px; transform: translateX(-7px); background: #ffd166; border-color: #fff; }
+    .railCue.playing {
+      width: 15px;
+      transform: translateX(-7px);
+      background: #56e98b;
+      border-color: #fff;
+      box-shadow: 0 0 0 2px #14773a, 0 0 14px rgba(86, 233, 139, 0.85);
+      z-index: 3;
+    }
+    .railCue.playing.selected { box-shadow: 0 0 0 2px #ffd166, 0 0 14px rgba(86, 233, 139, 0.85); }
+    .railPlayhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff5252; pointer-events: none; z-index: 2; }
+    .editorFilter { width: 100%; margin-bottom: 8px; }
+    .editorTableWrap { height: 430px; overflow: auto; border: 1px solid #303741; border-radius: 6px; background: #090b0e; }
+    .editorCueRow {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 64px 84px 84px minmax(0, 1fr) 36px;
+      gap: 7px;
+      align-items: center;
+      text-align: left;
+      padding: 7px 8px;
+      border: 0;
+      border-radius: 0;
+      border-bottom: 1px solid #252b34;
+      background: transparent;
+      min-height: 42px;
+    }
+    .editorCueRow:hover { background: #171c23; }
+    .editorCueRow.selected { color: #111; background: #ffd166; }
+    .editorCueRow.playing {
+      color: #061109;
+      background: #56e98b;
+      box-shadow: inset 6px 0 #fff;
+      font-weight: 800;
+    }
+    .editorCueRow.playing:hover { background: #6df09b; }
+    .editorCueRow.playing.selected { outline: 2px solid #ffd166; outline-offset: -2px; }
+    .editorCueRow.dirty:not(.selected):not(.playing) { border-left: 4px solid #ffd166; }
+    .editorCueRow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .editorCueRow .disabledCue { color: var(--bad); }
+    .muted { color: var(--muted); }
+    canvas { display: none; }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .phaseGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #calloutSection { order: -1; }
+      .prompterMove { font-size: 56px; }
+      .prompterSeconds { font-size: 92px; }
+      .editorView { grid-template-columns: 1fr; }
+      .editorTableWrap { height: 360px; }
+      body.focus-prompter .prompterMove { font-size: 72px; }
+      body.focus-prompter .prompterSeconds { font-size: 112px; }
+    }
+    @media (max-width: 600px) {
+      .prompterPanel { min-height: 340px; padding: 12px; }
+      .prompterMain { grid-template-columns: minmax(0, 1fr) 126px; gap: 8px; }
+      .prompterMove { font-size: 44px; }
+      .prompterSeconds { font-size: 72px; }
+      .prompterFollowing { grid-template-columns: 1fr; }
+      .followingCue:nth-child(n+2) { display: none; }
+      .phaseAlignment { grid-template-columns: 1fr; }
+      .editorCueRow { grid-template-columns: 42px 76px minmax(0, 1fr) 30px; }
+      .editorCueRow .promptCol { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>黑魔法師招式提示機</h1>
+    <div class="modeSwitch" role="tablist" aria-label="工具模式">
+      <button id="liveModeBtn" class="active" role="tab" aria-selected="true">實戰提詞</button>
+      <button id="editorModeBtn" role="tab" aria-selected="false">時間軸編輯</button>
+    </div>
+    <button id="prompterFocusBtn" class="liveControl">專注提詞</button>
+    <button id="shareBtn" class="primary liveControl">分享畫面並開始</button>
+    <button id="baselineBtn" class="liveControl" hidden>基準影片測試</button>
+    <button id="selfTestBtn" class="liveControl" hidden>快速自測 P1-P4</button>
+    <button id="testVoiceBtn" class="liveControl">測試語音</button>
+    <button id="resetBtn" class="warn liveControl" hidden>重置回 P1</button>
+    <button id="stopBtn" class="bad liveControl">停止</button>
+    <span class="headerSpacer"></span>
+    <span id="topStatus" class="muted">載入中</span>
+  </header>
+
+  <main id="liveView">
+    <section id="captureSection">
+      <div class="metrics">
+        <div class="metric"><div class="label">狀態</div><div id="status" class="value">載入中</div></div>
+        <div class="metric"><div class="label">目前階段</div><div id="phase" class="value">-</div></div>
+        <div class="metric"><div class="label">階段時間</div><div id="phaseTime" class="value">--:--.---</div></div>
+        <div class="metric"><div class="label">等待過場</div><div id="expected" class="value">P1</div></div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="label">偵測分數</div><div id="score" class="value">-</div></div>
+        <div class="metric"><div class="label">HUD 起算</div><div id="hud" class="value">-</div></div>
+        <div class="metric"><div class="label">畫面</div><div id="capture" class="value">-</div></div>
+        <div class="metric"><div class="label">語音</div><div id="audio" class="value">-</div></div>
+      </div>
+      <div class="videoBox">
+        <video id="video" playsinline></video>
+        <div id="placeholder" class="placeholder">按「分享畫面並開始」，選遊戲視窗、OBS 預覽或 YouTube 全螢幕</div>
+      </div>
+      <div class="settings">
+        <label>提前秒數 <input id="leadInput" type="number" min="-5" max="10" step="0.5" value="0"></label>
+        <label>語音音量 <input id="volumeInput" type="range" min="0" max="100" step="5" value="100"></label>
+        <span id="volumeText">100%</span>
+        <label><input id="muteInput" type="checkbox"> 靜音</label>
+        <label>偵測門檻 <input id="thresholdInput" type="number" min="0.70" max="0.98" step="0.01" value="0.84"></label>
+      </div>
+      <div class="manual">
+        <span class="muted">手動起算：</span>
+        <button data-manual-phase="P1">P1</button>
+        <button data-manual-phase="P2">P2</button>
+        <button data-manual-phase="P3">P3</button>
+        <button data-manual-phase="P4">P4</button>
+      </div>
+    </section>
+
+    <section id="calloutSection">
+      <div id="prompterPanel" class="prompterPanel" data-urgency="idle">
+        <div class="prompterHeader">
+          <span id="prompterPhase">等待 P1 過場</span>
+          <span id="prompterPhaseTime">--:--.---</span>
+        </div>
+        <div class="prompterMain">
+          <div>
+            <div id="prompterLabel" class="prompterLabel">下一招</div>
+            <div id="prompterMove" class="prompterMove">等待過場</div>
+          </div>
+          <div class="prompterCountdown">
+            <span id="prompterSeconds" class="prompterSeconds">--</span>
+            <span id="prompterUnit" class="prompterUnit">秒</span>
+          </div>
+        </div>
+        <div id="prompterFollowing" class="prompterFollowing"></div>
+      </div>
+      <div id="calloutNow" class="currentCallout">現在：-</div>
+      <div id="calloutNext" class="nextCallout">下一句：-</div>
+      <div id="phaseCards" class="phaseGrid"></div>
+      <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section id="logSection">
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+
+  <main id="editorView" class="editorView">
+    <section>
+      <div class="editorToolbar">
+        <button id="editorBaselineBtn" class="primary">載入基準影片</button>
+        <input id="editorYoutubeInput" class="youtubeUrlInput" type="url" inputmode="url" value="https://youtu.be/-O4WH-sTv4w" aria-label="YouTube 影片網址" placeholder="貼上 YouTube 影片網址">
+        <button id="editorYoutubeBtn">載入 YouTube</button>
+        <button id="editorDetectPhasesBtn">自動校正階段</button>
+        <span id="editorVideoName" class="muted">尚未載入影片</span>
+        <span id="editorPhaseStatus" class="muted">等待影片</span>
+      </div>
+      <div class="editorVideoBox">
+        <video id="editorVideo" controls playsinline preload="metadata"></video>
+        <div id="editorYoutubeWrap" class="editorYoutubeWrap" hidden>
+          <div id="editorYoutubePlayer"></div>
+        </div>
+      </div>
+      <video id="editorCaptureVideo" class="editorCaptureVideo" muted playsinline></video>
+      <div class="editorTransport">
+        <button id="editorPlayBtn" title="播放或暫停">播放</button>
+        <button data-editor-seek="-1">-1s</button>
+        <button data-editor-seek="-0.1">-0.1s</button>
+        <span id="editorVideoTime" class="editorClock">00:00.000</span>
+        <button data-editor-seek="0.1">+0.1s</button>
+        <button data-editor-seek="1">+1s</button>
+        <label class="editorVoiceToggle"><input id="editorVoiceInput" type="checkbox" checked> 提示語音</label>
+      </div>
+      <div id="editorPhaseTabs" class="editorPhaseTabs" role="tablist" aria-label="編輯階段">
+        <button data-editor-phase="P1">P1</button>
+        <button data-editor-phase="P2">P2</button>
+        <button data-editor-phase="P3">P3</button>
+        <button data-editor-phase="P4">P4</button>
+      </div>
+      <div class="phaseAlignment">
+        <label>HUD 影片時間 <input id="editorHudInput" type="number" min="0" step="0.001" value="0"></label>
+        <div class="editorToolbar">
+          <button id="editorSetHudBtn">設為影片當下</button>
+          <button id="editorJumpHudBtn">跳到 HUD</button>
+        </div>
+      </div>
+      <div class="skillCreator">
+        <h2>快速新增招式</h2>
+        <div class="editorToolbar">
+          <input id="editorNewSkillInput" class="editorNewSkillInput" maxlength="60" placeholder="招式名稱">
+          <button id="editorAddSkillBtn" class="primary">新增到目前時間</button>
+        </div>
+        <div id="editorSkillLibrary" class="editorSkillLibrary"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="editorActions">
+        <div>
+          <button id="editorSaveBtn" class="primary" disabled>儲存調整</button>
+          <button id="editorReloadBtn">放棄未儲存</button>
+          <button id="editorSubmitBtn" disabled>回傳建議</button>
+        </div>
+        <span id="editorStatus" class="editorStatus">沒有未儲存變更</span>
+      </div>
+      <div class="selectedCue">
+        <div id="editorSelectedName" class="selectedCueName">尚未選取招式</div>
+        <div class="editorFields">
+          <label class="textField"><span>提示文字</span><input id="editorTextInput" maxlength="60" disabled></label>
+          <label><span>招式時間</span><input id="editorStartInput" type="number" min="0" step="0.001" disabled></label>
+          <label><span>提前秒數</span><input id="editorLeadInput" type="number" min="-30" max="60" step="0.1" disabled></label>
+          <label><span>提示時間</span><input id="editorPromptInput" type="number" step="0.001" readonly disabled></label>
+          <label class="checkField"><input id="editorEnabledInput" type="checkbox" disabled> 啟用</label>
+        </div>
+        <div class="editorToolbar">
+          <button id="editorSetCueBtn" disabled>招式設為影片當下</button>
+          <button id="editorJumpCueBtn" disabled>從提示時間播放</button>
+          <button id="editorPreviewCueBtn" disabled>試聽語音</button>
+          <button id="editorDeleteCueBtn" disabled>刪除招式</button>
+          <button data-editor-nudge="-1" disabled>-1s</button>
+          <button data-editor-nudge="-0.1" disabled>-0.1s</button>
+          <button data-editor-nudge="0.1" disabled>+0.1s</button>
+          <button data-editor-nudge="1" disabled>+1s</button>
+        </div>
+      </div>
+      <div id="editorRailViewport" class="editorRailViewport"><div id="editorRail" class="editorRail"></div></div>
+      <input id="editorFilter" class="editorFilter" type="search" placeholder="搜尋本階段招式">
+      <div id="editorTable" class="editorTableWrap"></div>
+    </section>
+  </main>
+
+  <dialog id="feedbackDialog" class="feedbackDialog">
+    <form id="feedbackForm" class="feedbackForm">
+      <h2>回傳時間軸建議</h2>
+      <div id="feedbackSummary" class="feedbackSummary"></div>
+      <label>暱稱<input id="feedbackReporter" maxlength="60" autocomplete="nickname"></label>
+      <label>備註<textarea id="feedbackNote" maxlength="600"></textarea></label>
+      <div id="feedbackStatus" class="feedbackStatus"></div>
+      <div class="feedbackDialogActions">
+        <button id="feedbackCancelBtn" type="button">取消</button>
+        <button id="feedbackSendBtn" class="primary" type="submit">確認回傳</button>
+      </div>
+    </form>
+  </dialog>
+
+  <canvas id="matchCanvas"></canvas>
+  <canvas id="templateCanvas"></canvas>
+  <canvas id="metricCanvas"></canvas>
+
+  <script>
+    const PHASE_ORDER = ["P1", "P2", "P3", "P4"];
+    const STATIC_DEPLOYMENT = true;
+    const STATIC_ASSET_BASE_URL = new URL("./", window.location.href);
+    const FEEDBACK_API_URL = "https://maplestorym-black-mage-timer.jrychang0621.chatgpt.site/api/timeline-feedback";
+    const IS_GITHUB_PAGES = window.location.hostname.endsWith(".github.io");
+    const STATIC_TIMELINE_KEY = "blackMageWeb2TimelineChanges";
+    const CUSTOM_CUES_KEY = "blackMageEditorCustomCues";
+    const CUSTOM_SKILLS_KEY = "blackMageEditorCustomSkills";
+    const FEEDBACK_REPORTER_KEY = "blackMageWeb2FeedbackReporter";
+    const EDITOR_YOUTUBE_KEY = "blackMageEditorYoutubeUrl";
+    const DEFAULT_EDITOR_YOUTUBE_URL = "https://youtu.be/-O4WH-sTv4w";
+    const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
+    const state = {
+      assets: null,
+      baseTimeline: [],
+      templatesByPhase: {},
+      timelineByPhase: {},
+      expectedIndex: 0,
+      activePhase: "",
+      phaseStartMs: 0,
+      activeCues: [],
+      cueIndex: 0,
+      playedKeys: new Set(),
+      pending: null,
+      lastScanMs: 0,
+      confirm: null,
+      sourceMode: "",
+      stream: null,
+      running: false,
+      raf: 0,
+      audioContext: null,
+      audioGain: null,
+      audioBuffers: new Map(),
+      fallbackAudios: [],
+      playingSources: [],
+      audioLoading: false,
+      audioReady: false,
+      audioLoaded: 0,
+      audioTotal: 0,
+      volume: 1,
+      audioMuted: false,
+      extraLeadS: 0,
+      threshold: 0.84,
+      selfTesting: false,
+      currentCue: null,
+      currentCueUntilMs: 0,
+      p1HudFallback: { hiddenSinceMs: 0, lastHiddenMs: 0, visibleCount: 0, firstVisibleMs: 0 },
+      transitionFallback: {
+        phase: "",
+        hiddenSinceMs: 0,
+        lastHiddenMs: 0,
+        bestScore: 0,
+        visibleCount: 0,
+        firstVisibleMs: 0,
+        whiteCount: 0,
+      },
+      lastScanTelemetryMs: 0,
+      contentRectLock: null,
+      lastWideSearchMs: 0,
+      sessionId: `web2-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`,
+    };
+    const editorState = {
+      phase: "P1",
+      cues: [],
+      originalByKey: new Map(),
+      dirtyKeys: new Set(),
+      selectedKey: "",
+      hudTimes: {},
+      sourceName: "",
+      sourceMode: "",
+      detectionToken: 0,
+      detecting: false,
+      phaseMethods: {},
+      railWidth: 900,
+      feedbackSubmitting: false,
+      voiceEnabled: true,
+      voiceLastVideoS: Number.NaN,
+      voiceSeeking: false,
+      voiceGeneration: 0,
+      voicePlayedKeys: new Set(),
+      voiceArmedKey: "",
+      voiceArmedAtS: Number.NaN,
+      playbackCueKey: "",
+      playbackPhase: "",
+      customSkillTexts: new Set(),
+      youtubePlayer: null,
+      youtubeReady: false,
+      youtubeVideoId: "",
+      youtubeUrl: "",
+      youtubeApiPromise: null,
+      youtubeState: -1,
+      captureStream: null,
+      captureEnded: false,
+      titleBeforeScan: "",
+    };
+
+    function setText(id, text, cls = "") {
+      const el = els[id];
+      if (!el) return;
+      el.textContent = text;
+      el.className = `value ${cls}`.trim();
+    }
+
+    function log(message, cls = "") {
+      const stamp = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+      const line = `${stamp} ${message}`;
+      const div = document.createElement("div");
+      if (cls) div.className = cls;
+      div.textContent = line;
+      els.log.appendChild(div);
+      els.log.scrollTop = els.log.scrollHeight;
+      console.log(line);
+    }
+
+    function postEvent(row) {
+      if (STATIC_DEPLOYMENT) return;
+      const payload = {
+        row: {
+          session_id: state.sessionId,
+          source: state.sourceMode,
+          event_time: new Date().toISOString(),
+          ...row,
+        },
+      };
+      fetch("/api/web-live-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+
+    function readStoredTimelineChanges() {
+      try {
+        return JSON.parse(localStorage.getItem(STATIC_TIMELINE_KEY) || "{}") || {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function readStoredCustomCues() {
+      try {
+        const value = JSON.parse(localStorage.getItem(CUSTOM_CUES_KEY) || "[]");
+        return Array.isArray(value) ? value : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function readStoredCustomSkills() {
+      try {
+        const value = JSON.parse(localStorage.getItem(CUSTOM_SKILLS_KEY) || "[]");
+        return Array.isArray(value) ? value.map((text) => String(text || "").trim()).filter(Boolean) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function voiceCueForText(text) {
+      const normalized = String(text || "").trim();
+      return state.baseTimeline.find((cue) => String(cue.text || "").trim() === normalized && cue.clip_url) || null;
+    }
+
+    function applyCueVoice(cue) {
+      const match = voiceCueForText(cue.text);
+      cue.clip_url = match?.clip_url || "";
+      cue.clip_path = match?.clip_path || "";
+      cue.tts_text = String(match?.tts_text || "").trim()
+        || (String(cue.text || "").trim() === "地刺" ? "第刺" : "");
+      cue.duration_s = Number(match?.duration_s || cue.duration_s || Math.max(0.8, String(cue.text || "").length * 0.22));
+    }
+
+    function appendStoredCustomCues(data) {
+      if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
+      const existing = new Set(data.timeline.map((cue) => `${cue.phase}:${cue.cue_index}`));
+      for (const raw of readStoredCustomCues()) {
+        const phase = String(raw.phase || "");
+        const cueIndex = Number(raw.cue_index);
+        const text = String(raw.text || "").trim();
+        if (!PHASE_ORDER.includes(phase) || !Number.isInteger(cueIndex) || cueIndex < 1001 || !text) continue;
+        const key = `${phase}:${cueIndex}`;
+        if (existing.has(key)) continue;
+        const cue = {
+          ...raw,
+          phase,
+          cue_index: cueIndex,
+          text,
+          start_s: Math.max(0, Number(raw.start_s || 0)),
+          end_s: Math.max(0, Number(raw.end_s ?? raw.start_s ?? 0)),
+          lead_s: Number(raw.lead_s ?? 2),
+          offset_s: Number(raw.offset_s || 0),
+          enabled: raw.enabled !== false,
+          custom: true,
+          deleted: false,
+        };
+        cue.scheduled_s = Math.max(0, cue.start_s + cue.offset_s - cue.lead_s);
+        applyCueVoice(cue);
+        data.timeline.push(cue);
+        existing.add(key);
+      }
+      return data;
+    }
+
+    function applyStoredTimelineChanges(data) {
+      if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
+      const stored = readStoredTimelineChanges();
+      for (const cue of data.timeline) {
+        cue.custom = false;
+        cue.deleted = false;
+        const change = stored[`${cue.phase}:${cue.cue_index}`];
+        if (!change) continue;
+        cue.text = String(change.text ?? cue.text ?? "").trim() || cue.text;
+        cue.start_s = Number(change.start_s ?? cue.start_s ?? 0);
+        cue.lead_s = Number(change.lead_s ?? cue.lead_s ?? 0);
+        cue.enabled = Boolean(change.enabled);
+        cue.deleted = Boolean(change.deleted);
+        cue.scheduled_s = Math.max(0, cue.start_s + Number(cue.offset_s || 0) - cue.lead_s);
+        applyCueVoice(cue);
+      }
+      return data;
+    }
+
+    function fmt(seconds) {
+      if (!Number.isFinite(seconds)) return "--:--.---";
+      const totalMs = Math.max(0, Math.round(seconds * 1000));
+      const ms = totalMs % 1000;
+      const totalS = Math.floor(totalMs / 1000);
+      const s = totalS % 60;
+      const m = Math.floor(totalS / 60);
+      return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+    }
+
+    function visibleCountdown(seconds) {
+      if (!Number.isFinite(seconds)) return "--";
+      if (seconds >= 10) return String(Math.ceil(seconds));
+      return Math.max(0, seconds).toFixed(1);
+    }
+
+    function updatePrompter(now) {
+      const panel = els.prompterPanel;
+      if (!panel) return;
+      if (state.pending) {
+        const remain = Math.max(0, (state.pending.hudMs - now) / 1000);
+        panel.dataset.urgency = "soon";
+        els.prompterPhase.textContent = `${state.pending.phase} 過場已偵測`;
+        els.prompterPhaseTime.textContent = "等待 HUD";
+        els.prompterLabel.textContent = "階段即將開始";
+        els.prompterMove.textContent = "等待 HUD";
+        els.prompterSeconds.textContent = visibleCountdown(remain);
+        els.prompterUnit.textContent = "秒";
+        els.prompterFollowing.innerHTML = "";
+        return;
+      }
+      if (!state.activePhase) {
+        panel.dataset.urgency = "idle";
+        els.prompterPhase.textContent = `等待 ${expectedPhase()} 過場`;
+        els.prompterPhaseTime.textContent = "--:--.---";
+        els.prompterLabel.textContent = "下一階段";
+        els.prompterMove.textContent = expectedPhase() === "-" ? "已停止" : `等待 ${expectedPhase()}`;
+        els.prompterSeconds.textContent = "--";
+        els.prompterUnit.textContent = "秒";
+        els.prompterFollowing.innerHTML = "";
+        return;
+      }
+
+      const elapsed = Math.max(0, (now - state.phaseStartMs) / 1000);
+      els.prompterPhase.textContent = `${state.activePhase} 進行中`;
+      els.prompterPhaseTime.textContent = fmt(elapsed);
+      if (state.currentCue && now < state.currentCueUntilMs) {
+        panel.dataset.urgency = "now";
+        els.prompterLabel.textContent = "現在";
+        els.prompterMove.textContent = state.currentCue.text || "-";
+        els.prompterSeconds.textContent = "現在";
+        els.prompterUnit.textContent = "";
+      } else {
+        state.currentCue = null;
+        const cue = state.activeCues[state.cueIndex];
+        if (!cue) {
+          panel.dataset.urgency = "idle";
+          els.prompterLabel.textContent = "本階段";
+          els.prompterMove.textContent = "提示已播完";
+          els.prompterSeconds.textContent = "--";
+          els.prompterUnit.textContent = "";
+        } else {
+          const remain = Math.max(0, effectiveScheduledS(cue) - elapsed);
+          panel.dataset.urgency = remain <= 3 ? "critical" : remain <= 7 ? "soon" : "ready";
+          els.prompterLabel.textContent = "下一招";
+          els.prompterMove.textContent = cue.text || "-";
+          els.prompterSeconds.textContent = visibleCountdown(remain);
+          els.prompterUnit.textContent = "秒";
+        }
+      }
+
+      const followingStart = panel.dataset.urgency === "now" ? state.cueIndex : state.cueIndex + 1;
+      const following = state.activeCues.slice(followingStart, followingStart + 2);
+      els.prompterFollowing.innerHTML = following.map((cue) => {
+        const remain = Math.max(0, effectiveScheduledS(cue) - elapsed);
+        return `<div class="followingCue"><strong>${visibleCountdown(remain)}s</strong><span>${escapeHtml(cue.text || "-")}</span></div>`;
+      }).join("");
+    }
+
+    function effectiveScheduledS(cue) {
+      return Math.max(0, Number(cue.scheduled_s || 0) - state.extraLeadS);
+    }
+
+    function cueKey(cue) {
+      return `${cue.phase}:${cue.cue_index}:${cue.text}:${cue.scheduled_s}`;
+    }
+
+    function expectedPhase() {
+      return PHASE_ORDER[state.expectedIndex] || "-";
+    }
+
+    function renderPhaseCards() {
+      els.phaseCards.innerHTML = PHASE_ORDER.map((phase) => {
+        const count = (state.timelineByPhase[phase] || []).length;
+        const played = [...state.playedKeys].filter((key) => key.startsWith(`${phase}:`)).length;
+        const active = phase === state.activePhase ? "active" : "";
+        const detected = state.expectedIndex > PHASE_ORDER.indexOf(phase) ? "detected" : "";
+        return `<div class="phaseCard ${active} ${detected}">
+          <strong>${phase}</strong>
+          <span>${played}/${count} 句</span>
+          <span>${phase === state.activePhase ? fmt((performance.now() - state.phaseStartMs) / 1000) : detected ? "已經過" : "等待"}</span>
+        </div>`;
+      }).join("");
+    }
+
+    function renderTimeline() {
+      if (!state.activePhase) {
+        els.timeline.innerHTML = `<div class="cueRow"><span>-</span><span>-</span><span class="muted">等待階段開始</span></div>`;
+        return;
+      }
+      els.timeline.innerHTML = state.activeCues.map((cue, index) => {
+        const key = cueKey(cue);
+        const played = state.playedKeys.has(key) ? "played" : "";
+        const next = index === state.cueIndex ? "next" : "";
+        return `<div class="cueRow ${played} ${next}">
+          <span>${cue.phase}#${cue.cue_index}</span>
+          <span>${fmt(effectiveScheduledS(cue))}</span>
+          <span>${escapeHtml(cue.text || "")}</span>
+        </div>`;
+      }).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[ch]));
+    }
+
+    function resetRun() {
+      stopAllAudio();
+      state.expectedIndex = 0;
+      state.activePhase = "";
+      state.phaseStartMs = 0;
+      state.activeCues = [];
+      state.cueIndex = 0;
+      state.playedKeys = new Set();
+      state.pending = null;
+      state.confirm = null;
+      state.currentCue = null;
+      state.currentCueUntilMs = 0;
+      resetP1HudFallback();
+      resetTransitionFallback();
+      state.lastScanTelemetryMs = 0;
+      state.contentRectLock = null;
+      state.lastWideSearchMs = 0;
+      setText("status", "等待 P1 過場", "ok");
+      setText("phase", "-");
+      setText("phaseTime", "--:--.---");
+      setText("expected", "P1");
+      setText("score", "-");
+      setText("hud", "-");
+      els.calloutNow.textContent = "現在：-";
+      els.calloutNext.textContent = "下一句：-";
+      renderPhaseCards();
+      renderTimeline();
+      postEvent({ event_type: "reset", phase: "" });
+      log("重置：等待 P1 過場", "warnText");
+    }
+
+    function stopAllAudio() {
+      for (const source of state.playingSources) {
+        try { source.stop(); } catch (_) {}
+      }
+      state.playingSources = [];
+      for (const audio of state.fallbackAudios) {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (_) {}
+      }
+      state.fallbackAudios = [];
+      try { window.speechSynthesis?.cancel(); } catch (_) {}
+    }
+
+    function stopSource() {
+      const hadSource = Boolean(state.running || state.stream || els.video.currentSrc || els.video.srcObject);
+      const stoppedPhase = state.activePhase;
+      stopAllAudio();
+      if (state.stream) {
+        for (const track of state.stream.getTracks()) track.stop();
+        state.stream = null;
+      }
+      els.video.pause();
+      els.video.removeAttribute("src");
+      els.video.srcObject = null;
+      els.video.load();
+      els.video.controls = false;
+      state.running = false;
+      state.selfTesting = false;
+      state.sourceMode = "";
+      state.activePhase = "";
+      state.phaseStartMs = 0;
+      state.activeCues = [];
+      state.cueIndex = 0;
+      state.pending = null;
+      state.confirm = null;
+      state.currentCue = null;
+      state.currentCueUntilMs = 0;
+      resetP1HudFallback();
+      resetTransitionFallback();
+      state.contentRectLock = null;
+      state.lastWideSearchMs = 0;
+      state.expectedIndex = PHASE_ORDER.length;
+      setText("status", "已停止", "warnText");
+      setText("phase", "-");
+      setText("phaseTime", "--:--.---");
+      setText("expected", "-");
+      setText("score", "-");
+      setText("hud", "-");
+      setText("capture", "-");
+      els.calloutNow.textContent = "現在：-";
+      els.calloutNext.textContent = "下一句：-";
+      els.placeholder.style.display = "flex";
+      renderPhaseCards();
+      renderTimeline();
+      if (hadSource) {
+        postEvent({ event_type: "stop", phase: stoppedPhase || "" });
+        log("停止來源與語音", "warnText");
+      }
+    }
+
+    function uniqueAudioCues() {
+      const seen = new Set();
+      const cues = [];
+      for (const cue of state.assets?.timeline || []) {
+        if (!cue.enabled || cue.deleted || !cue.clip_url || seen.has(cue.clip_url)) continue;
+        seen.add(cue.clip_url);
+        cues.push(cue);
+      }
+      return cues;
+    }
+
+    function ensureAudioContext() {
+      if (!state.audioContext) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        state.audioContext = new AudioCtx();
+        state.audioGain = state.audioContext.createGain();
+        state.audioGain.gain.value = state.volume;
+        state.audioGain.connect(state.audioContext.destination);
+      }
+      return state.audioContext;
+    }
+
+    async function unlockAudio(timeoutMs = 800) {
+      const audioContext = ensureAudioContext();
+      if (audioContext.state !== "running") {
+        await Promise.race([
+          audioContext.resume().catch(() => {}),
+          new Promise((resolve) => window.setTimeout(resolve, timeoutMs)),
+        ]);
+      }
+      if (audioContext.state !== "running") return false;
+      const source = state.audioContext.createBufferSource();
+      source.buffer = state.audioContext.createBuffer(1, 1, 22050);
+      source.connect(state.audioGain);
+      source.start();
+      return true;
+    }
+
+    function updateAudioStatus() {
+      if (!state.assets) {
+        setText("audio", "-");
+        return;
+      }
+      if (state.audioMuted) setText("audio", "靜音", "warnText");
+      else if (state.audioReady) setText("audio", `${state.audioLoaded}/${state.audioTotal}`, "ok");
+      else if (state.audioLoading) setText("audio", `${state.audioLoaded}/${state.audioTotal}`, "warnText");
+      else setText("audio", "未載入", "warnText");
+    }
+
+    async function preloadAudio() {
+      if (state.audioLoading || state.audioReady || !state.assets) return;
+      ensureAudioContext();
+      const cues = uniqueAudioCues();
+      state.audioTotal = cues.length;
+      state.audioLoaded = 0;
+      state.audioLoading = true;
+      updateAudioStatus();
+      for (const cue of cues) {
+        try {
+          const response = await fetch(staticAssetUrl(cue.clip_url), { cache: "force-cache" });
+          if (!response.ok) throw new Error(response.statusText);
+          const bytes = await response.arrayBuffer();
+          const buffer = await state.audioContext.decodeAudioData(bytes.slice(0));
+          state.audioBuffers.set(cue.clip_url, buffer);
+          state.audioLoaded += 1;
+          updateAudioStatus();
+        } catch (error) {
+          log(`語音載入失敗 ${cue.text}: ${error.message}`, "badText");
+        }
+      }
+      state.audioLoading = false;
+      state.audioReady = state.audioLoaded > 0;
+      updateAudioStatus();
+      log(`語音載入完成 ${state.audioLoaded}/${state.audioTotal}`, state.audioReady ? "ok" : "badText");
+      postEvent({ event_type: "audio_ready", audio_cache_ready: state.audioLoaded, audio_cache_total: state.audioTotal });
+    }
+
+    function preferredChineseVoice() {
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      const preferredName = /(HsiaoChen|HsiaoYu|Mei-Jia|Xiaoxiao|曉臻|曉雨|美佳|Google.*(國語|中文))/i;
+      return voices.find((voice) => /^zh-TW$/i.test(voice.lang) && preferredName.test(voice.name))
+        || voices.find((voice) => /^zh-TW$/i.test(voice.lang))
+        || voices.find((voice) => /^zh/i.test(voice.lang) && preferredName.test(voice.name))
+        || voices.find((voice) => /^zh/i.test(voice.lang))
+        || null;
+    }
+
+    function cueSpeechText(cue) {
+      const explicit = String(cue.tts_text || "").trim();
+      if (explicit) return explicit;
+      const displayText = String(cue.text || "").trim();
+      return displayText === "地刺" ? "第刺" : displayText;
+    }
+
+    function speakCueText(cue, shouldStart) {
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !shouldStart()) return false;
+      const utterance = new SpeechSynthesisUtterance(cueSpeechText(cue));
+      const voice = preferredChineseVoice();
+      if (voice) utterance.voice = voice;
+      utterance.lang = voice?.lang || "zh-TW";
+      utterance.rate = 1.06;
+      utterance.pitch = 1.08;
+      utterance.volume = state.volume;
+      window.speechSynthesis.speak(utterance);
+      return true;
+    }
+
+    async function playCueAudio(cue, { ignoreMuted = false, shouldStart = () => true } = {}) {
+      if ((state.audioMuted && !ignoreMuted) || !shouldStart()) return false;
+      if (!cue.clip_url) return speakCueText(cue, shouldStart);
+      try {
+        const webAudioReady = await unlockAudio();
+        if ((state.audioMuted && !ignoreMuted) || !shouldStart()) return false;
+        const buffer = state.audioBuffers.get(cue.clip_url);
+        if (buffer && webAudioReady) {
+          state.audioGain.gain.value = state.volume;
+          const source = state.audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(state.audioGain);
+          state.playingSources.push(source);
+          source.onended = () => {
+            state.playingSources = state.playingSources.filter((item) => item !== source);
+          };
+          source.start();
+        } else {
+          const audio = new Audio(staticAssetUrl(cue.clip_url));
+          audio.volume = state.volume;
+          state.fallbackAudios.push(audio);
+          audio.onended = () => {
+            state.fallbackAudios = state.fallbackAudios.filter((item) => item !== audio);
+          };
+          await audio.play();
+        }
+        return true;
+      } catch (error) {
+        log(`播放失敗 ${cue.text}: ${error.message}`, "badText");
+        return false;
+      }
+    }
+
+    async function playCue(cue, elapsed, late, force = false) {
+      const key = cueKey(cue);
+      if (!force && state.playedKeys.has(key)) return;
+      if (!force) state.playedKeys.add(key);
+      state.currentCue = cue;
+      state.currentCueUntilMs = performance.now() + Math.max(1800, Number(cue.duration_s || 0) * 1000);
+      els.calloutNow.textContent = `現在：${cue.text}`;
+      log(`播報 ${cue.phase}#${cue.cue_index} ${cue.text} late=${late.toFixed(3)}s`, late > 0.35 ? "warnText" : "ok");
+      postEvent({
+        event_type: "callout_play",
+        phase: cue.phase,
+        cue_index: cue.cue_index,
+        text: cue.text,
+        scheduled_phase_s: Number(effectiveScheduledS(cue).toFixed(3)),
+        base_scheduled_phase_s: Number(cue.scheduled_s || 0),
+        elapsed_phase_s: Number(elapsed.toFixed(3)),
+        late_s: Number(late.toFixed(3)),
+        lead_s: Number(cue.lead_s || 0),
+        extra_lead_s: Number(state.extraLeadS.toFixed(3)),
+        clip_path: cue.clip_path || "",
+      });
+      if (state.audioMuted && !force) {
+        renderPhaseCards();
+        renderTimeline();
+        return;
+      }
+      await playCueAudio(cue, { ignoreMuted: force });
+      renderPhaseCards();
+      renderTimeline();
+    }
+
+    async function testVoice() {
+      const cue = state.assets?.timeline?.find((item) => item.enabled && item.clip_url);
+      if (!cue) {
+        log("沒有可用語音", "badText");
+        return;
+      }
+      if (!state.audioReady) preloadAudio().catch((error) => log(`語音預載失敗：${error.message}`, "badText"));
+      await playCue({ ...cue, phase: "TEST", cue_index: 0, scheduled_s: 0 }, 0, 0, true);
+    }
+
+    function fitProfileContentRect(video, locked = null) {
+      const profile = state.assets?.profile || { width: 2880, height: 1440 };
+      const vw = video.videoWidth || 0;
+      const vh = video.videoHeight || 0;
+      if (!vw || !vh) return { left: 0, top: 0, width: 0, height: 0 };
+      if (locked && locked.sourceWidth === vw && locked.sourceHeight === vh) {
+        return { left: locked.left, top: locked.top, width: locked.width, height: locked.height };
+      }
+      const expected = Number(profile.width || 2880) / Math.max(1, Number(profile.height || 1440));
+      let width = vw;
+      let height = Math.round(width / expected);
+      if (height > vh) {
+        height = vh;
+        width = Math.round(height * expected);
+      }
+      return {
+        left: Math.max(0, Math.round((vw - width) / 2)),
+        top: Math.max(0, Math.round((vh - height) / 2)),
+        width: Math.max(1, width),
+        height: Math.max(1, height),
+      };
+    }
+
+    function contentRectForProfile() {
+      return fitProfileContentRect(els.video, state.contentRectLock);
+    }
+
+    function contentRectCandidates() {
+      const centered = contentRectForProfile();
+      const video = els.video;
+      const vw = video.videoWidth || 0;
+      const vh = video.videoHeight || 0;
+      const lock = state.contentRectLock;
+      const hasValidLock = lock && lock.sourceWidth === vw && lock.sourceHeight === vh;
+      if (!vw || !vh || hasValidLock) return [centered];
+      const excessX = Math.max(0, vw - centered.width);
+      const excessY = Math.max(0, vh - centered.height);
+      if (!excessX && !excessY) return [centered];
+
+      const candidates = [];
+      const seen = new Set();
+      const add = (left, top) => {
+        const rect = {
+          left: Math.max(0, Math.min(excessX, Math.round(left))),
+          top: Math.max(0, Math.min(excessY, Math.round(top))),
+          width: centered.width,
+          height: centered.height,
+        };
+        const key = `${rect.left}:${rect.top}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          candidates.push(rect);
+        }
+      };
+      add(centered.left, centered.top);
+      if (excessX) {
+        const step = Math.max(1, Math.ceil(Math.max(centered.width / 8, excessX / 24)));
+        for (let left = 0; left < excessX; left += step) add(left, 0);
+        add(excessX, 0);
+      } else {
+        const step = Math.max(1, Math.ceil(Math.max(centered.height / 8, excessY / 24)));
+        for (let top = 0; top < excessY; top += step) add(0, top);
+        add(0, excessY);
+      }
+      return candidates;
+    }
+
+    function cropRectForVideo(video, crop, base) {
+      const profile = state.assets.profile;
+      const left = Math.max(base.left, Math.min(base.left + base.width - 1, Math.round(base.left + base.width * Number(crop.left || 0) / profile.width)));
+      const right = Math.max(left + 1, Math.min(base.left + base.width, Math.round(base.left + base.width * Number(crop.right || profile.width) / profile.width)));
+      const top = Math.max(base.top, Math.min(base.top + base.height - 1, Math.round(base.top + base.height * Number(crop.top || 0) / profile.height)));
+      const bottom = Math.max(top + 1, Math.min(base.top + base.height, Math.round(base.top + base.height * Number(crop.bottom || profile.height) / profile.height)));
+      return { left, top, width: right - left, height: bottom - top };
+    }
+
+    function cropRect(crop, useContentRect = false, baseOverride = null) {
+      const profile = state.assets.profile;
+      const video = els.video;
+      const base = baseOverride || (useContentRect
+        ? contentRectForProfile()
+        : { left: 0, top: 0, width: video.videoWidth || profile.width, height: video.videoHeight || profile.height });
+      return cropRectForVideo(video, crop, base);
+    }
+
+    function standardizeImageData(imageData) {
+      const data = imageData.data;
+      const len = imageData.width * imageData.height;
+      const gray = new Float32Array(len);
+      let sum = 0;
+      for (let i = 0, j = 0; i < data.length; i += 4, j += 1) {
+        const value = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        gray[j] = value;
+        sum += value;
+      }
+      const mean = sum / Math.max(1, len);
+      let norm = 0;
+      for (let i = 0; i < len; i += 1) {
+        gray[i] -= mean;
+        norm += gray[i] * gray[i];
+      }
+      norm = Math.sqrt(norm);
+      if (norm <= 1e-6) return null;
+      for (let i = 0; i < len; i += 1) gray[i] /= norm;
+      return gray;
+    }
+
+    function imageStats(imageData) {
+      const data = imageData.data;
+      const width = imageData.width;
+      const height = imageData.height;
+      const len = width * height;
+      const gray = new Float32Array(len);
+      let sum = 0;
+      for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+        const value = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        gray[p] = value;
+        sum += value;
+      }
+      const mean = sum / Math.max(1, len);
+      let variance = 0;
+      for (let i = 0; i < len; i += 1) {
+        const diff = gray[i] - mean;
+        variance += diff * diff;
+      }
+      let edgeCount = 0;
+      for (let y = 1; y < height; y += 1) {
+        for (let x = 1; x < width; x += 1) {
+          const p = y * width + x;
+          const diff = Math.abs(gray[p] - gray[p - 1]) + Math.abs(gray[p] - gray[p - width]);
+          if (diff > 55) edgeCount += 1;
+        }
+      }
+      return { std: Math.sqrt(variance / Math.max(1, len)), edge: edgeCount / Math.max(1, len) };
+    }
+
+    function dot(a, b) {
+      let total = 0;
+      for (let i = 0; i < a.length; i += 1) total += a[i] * b[i];
+      return total;
+    }
+
+    function prepareFrameVector(baseRect = null) {
+      const detector = state.assets.detector;
+      const crop = cropRect(state.assets.profile.matching_crop, true, baseRect);
+      const canvas = els.matchCanvas;
+      canvas.width = detector.match_width;
+      canvas.height = detector.match_height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(els.video, crop.left, crop.top, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+      return standardizeImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    }
+
+    function matchExpectedPhase() {
+      const phase = expectedPhase();
+      const templates = state.templatesByPhase[phase] || [];
+      if (!templates.length || phase === "-") return null;
+      let best = null;
+      const candidates = contentRectCandidates();
+      const scoredRects = new Set();
+      const scoreContentRect = (contentRect) => {
+        const key = `${contentRect.left}:${contentRect.top}`;
+        if (scoredRects.has(key)) return;
+        scoredRects.add(key);
+        const vector = prepareFrameVector(contentRect);
+        if (!vector) return;
+        for (const template of templates) {
+          const score = dot(template.vector, vector);
+          if (!best || score > best.score) best = { ...template, score, contentRect };
+        }
+      };
+      for (const contentRect of candidates) scoreContentRect(contentRect);
+
+      if (best && candidates.length > 1 && best.score >= 0.55) {
+        const horizontal = els.video.videoWidth > best.contentRect.width;
+        const maxOffset = horizontal
+          ? els.video.videoWidth - best.contentRect.width
+          : els.video.videoHeight - best.contentRect.height;
+        const basePosition = horizontal ? best.contentRect.left : best.contentRect.top;
+        const size = horizontal ? best.contentRect.width : best.contentRect.height;
+        for (const divisor of [16, 32, 64]) {
+          const delta = Math.max(1, Math.round(size / divisor));
+          for (const direction of [-1, 1]) {
+            const position = Math.max(0, Math.min(maxOffset, basePosition + direction * delta));
+            scoreContentRect({
+              left: horizontal ? position : best.contentRect.left,
+              top: horizontal ? best.contentRect.top : position,
+              width: best.contentRect.width,
+              height: best.contentRect.height,
+            });
+          }
+        }
+      }
+      if (best && candidates.length > 1 && best.score >= state.threshold) {
+        state.contentRectLock = {
+          ...best.contentRect,
+          sourceWidth: els.video.videoWidth,
+          sourceHeight: els.video.videoHeight,
+        };
+        log(`已定位遊戲畫面 ${best.contentRect.width}x${best.contentRect.height} @ ${best.contentRect.left},${best.contentRect.top}`, "ok");
+        postEvent({
+          event_type: "content_region_locked",
+          phase,
+          score: Number(best.score.toFixed(6)),
+          template: best.name,
+          capture_width: els.video.videoWidth,
+          capture_height: els.video.videoHeight,
+          content_left: best.contentRect.left,
+          content_top: best.contentRect.top,
+          content_width: best.contentRect.width,
+          content_height: best.contentRect.height,
+        });
+      }
+      return best;
+    }
+
+    function rgbToHsv(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const diff = max - min;
+      let h = 0;
+      if (diff !== 0) {
+        if (max === r) h = ((g - b) / diff) % 6;
+        else if (max === g) h = (b - r) / diff + 2;
+        else h = (r - g) / diff + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+      const s = max === 0 ? 0 : diff / max;
+      return [h, s * 255, max * 255];
+    }
+
+    function regionMetricsForVideo(video, kind, baseRect) {
+      const profile = state.assets.profile;
+      const crops = {
+        hud: { left: 1960, top: 1160, right: 2875, bottom: 1438 },
+        player: { left: 0, top: 0, right: 760, bottom: 300 },
+        boss: { left: profile.width * 0.28, top: 0, right: profile.width * 0.72, bottom: profile.height * 0.12 },
+        timer: { left: 1430, top: 90, right: 1615, bottom: 190 },
+        stage: { left: 700, top: 300, right: 2250, bottom: 1050 },
+      };
+      const crop = crops[kind] || crops.stage;
+      const rect = cropRectForVideo(video, crop, baseRect);
+      const width = 220;
+      const height = Math.max(1, Math.round(width * rect.height / rect.width));
+      const canvas = els.metricCanvas;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(video, rect.left, rect.top, rect.width, rect.height, 0, 0, width, height);
+      const img = ctx.getImageData(0, 0, width, height);
+      const data = img.data;
+      const gray = new Float32Array(width * height);
+      let colorCount = 0;
+      let neutralCount = 0;
+      let brightCount = 0;
+      let graySum = 0;
+      for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const [h, s, v] = rgbToHsv(r, g, b);
+        if (kind === "boss") {
+          if ((h <= 16 || h >= 340) && s >= 80 && v >= 80) colorCount += 1;
+        } else if (s > 45 && v > 50) {
+          colorCount += 1;
+        }
+        if (s < 70 && v > 145) neutralCount += 1;
+        if (v > 155) brightCount += 1;
+        gray[p] = 0.299 * r + 0.587 * g + 0.114 * b;
+        graySum += gray[p];
+      }
+      let edgeCount = 0;
+      for (let y = 1; y < height; y += 1) {
+        for (let x = 1; x < width; x += 1) {
+          const p = y * width + x;
+          const diff = Math.abs(gray[p] - gray[p - 1]) + Math.abs(gray[p] - gray[p - width]);
+          if (diff > 55) edgeCount += 1;
+        }
+      }
+      const count = Math.max(1, width * height);
+      return {
+        color: colorCount / count,
+        neutral: neutralCount / count,
+        bright: brightCount / count,
+        edge: edgeCount / count,
+        mean: graySum / count,
+      };
+    }
+
+    function regionMetrics(kind) {
+      return regionMetricsForVideo(els.video, kind, contentRectForProfile());
+    }
+
+    function readHudVisible() {
+      if (!state.assets || els.video.readyState < 2) return { visible: false, color: 0, edge: 0 };
+      const metrics = regionMetrics("hud");
+      const cfg = state.assets.detector.hud_visible || {};
+      const visible = metrics.color >= Number(cfg.skill_color_threshold || 0.15)
+        && metrics.edge >= Number(cfg.skill_edge_threshold || 0.05);
+      setText("hud", `${visible ? "可見" : "等待"} ${metrics.color.toFixed(2)}/${metrics.edge.toFixed(2)}`, visible ? "ok" : "warnText");
+      return { visible, ...metrics };
+    }
+
+    function readPlayerUiVisible() {
+      if (!state.assets || els.video.readyState < 2) return { visible: false, color: 0, edge: 0 };
+      const metrics = regionMetrics("player");
+      const cfg = state.assets.detector.player_ui_visible || {};
+      const visible = metrics.color >= Number(cfg.color_threshold || 0.10)
+        && metrics.edge >= Number(cfg.edge_threshold || 0.045);
+      return { visible, ...metrics };
+    }
+
+    function readCountdownVisible() {
+      if (!state.assets || els.video.readyState < 2) return { visible: false, neutral: 0, edge: 0 };
+      const metrics = regionMetrics("timer");
+      const visible = metrics.neutral >= 0.05
+        && metrics.neutral <= 0.65
+        && metrics.mean >= 40
+        && metrics.mean <= 170;
+      return { visible, ...metrics };
+    }
+
+    function readStageState() {
+      if (!state.assets || els.video.readyState < 2) return { dark: false, white: false, mean: 0, neutral: 0 };
+      const metrics = regionMetrics("stage");
+      return {
+        ...metrics,
+        dark: metrics.mean <= 25,
+        white: metrics.mean >= 145 && metrics.neutral >= 0.45,
+      };
+    }
+
+    function readBossHpVisible() {
+      if (!state.assets || els.video.readyState < 2) return { visible: false, color: 0, edge: 0 };
+      const metrics = regionMetrics("boss");
+      const cfg = state.assets.detector.boss_hp_visible || {};
+      const visible = metrics.color >= Number(cfg.red_threshold || 0.008)
+        && metrics.edge >= Number(cfg.edge_threshold || 0.02);
+      return { visible, ...metrics };
+    }
+
+    function resetP1HudFallback() {
+      state.p1HudFallback = { hiddenSinceMs: 0, lastHiddenMs: 0, visibleCount: 0, firstVisibleMs: 0 };
+    }
+
+    function resetTransitionFallback(phase = "") {
+      state.transitionFallback = {
+        phase,
+        hiddenSinceMs: 0,
+        lastHiddenMs: 0,
+        bestScore: 0,
+        visibleCount: 0,
+        firstVisibleMs: 0,
+        whiteCount: 0,
+      };
+    }
+
+    function updateP1HudFallback(now, best) {
+      if (expectedPhase() !== "P1" || state.activePhase || state.pending) {
+        resetP1HudFallback();
+        return;
+      }
+      const hud = readHudVisible();
+      const player = readPlayerUiVisible();
+      const fallback = state.p1HudFallback;
+      const uiStructureAbsent = hud.edge < 0.025 && player.edge < 0.035;
+      if (uiStructureAbsent) {
+        if (!fallback.hiddenSinceMs) fallback.hiddenSinceMs = now;
+        fallback.lastHiddenMs = now;
+        fallback.visibleCount = 0;
+        fallback.firstVisibleMs = 0;
+      } else if (fallback.hiddenSinceMs && fallback.lastHiddenMs
+        && fallback.lastHiddenMs - fallback.hiddenSinceMs >= 2800
+        && hud.visible) {
+        if (!fallback.visibleCount) fallback.firstVisibleMs = now;
+        fallback.visibleCount += 1;
+        const visibleStableMs = now - fallback.firstVisibleMs;
+        if (fallback.visibleCount >= 3 && visibleStableMs >= 280) {
+          const startMs = fallback.firstVisibleMs || now;
+          postEvent({
+            event_type: "p1_hud_fallback",
+            phase: "P1",
+            best_score: Number(best?.score?.toFixed(6) || 0),
+            hud_color: Number(hud.color.toFixed(4)),
+            hud_edge: Number(hud.edge.toFixed(4)),
+            player_ui_edge: Number(player.edge.toFixed(4)),
+          });
+          resetP1HudFallback();
+          startPhase("P1", startMs, "auto_ui_structure_to_hud");
+        }
+      } else if (fallback.lastHiddenMs && now - fallback.lastHiddenMs > 1200) {
+        resetP1HudFallback();
+      } else if (!hud.visible) {
+        fallback.visibleCount = 0;
+        fallback.firstVisibleMs = 0;
+      }
+
+      if (now - state.lastScanTelemetryMs >= 5000) {
+        state.lastScanTelemetryMs = now;
+        postEvent({
+          event_type: "scan_status",
+          phase: "P1",
+          expected_phase: expectedPhase(),
+          best_score: Number(best?.score?.toFixed(6) || 0),
+          template: best?.name || "",
+          capture_width: els.video.videoWidth || 0,
+          capture_height: els.video.videoHeight || 0,
+          content_left: contentRectForProfile().left,
+          content_top: contentRectForProfile().top,
+          content_locked: Boolean(state.contentRectLock),
+          hud_visible: hud.visible,
+          player_ui_visible: player.visible,
+          fallback_armed: Boolean(fallback.hiddenSinceMs
+            && fallback.lastHiddenMs - fallback.hiddenSinceMs >= 2800),
+        });
+      }
+    }
+
+    function updatePhaseTransitionFallback(now, best) {
+      const phase = expectedPhase();
+      if (!state.activePhase || state.pending || !["P2", "P3", "P4"].includes(phase)) {
+        resetTransitionFallback();
+        return;
+      }
+      if (state.transitionFallback.phase !== phase) resetTransitionFallback(phase);
+
+      const fallback = state.transitionFallback;
+      const hud = readHudVisible();
+      const player = readPlayerUiVisible();
+      const timer = readCountdownVisible();
+      const boss = readBossHpVisible();
+      const stage = readStageState();
+      fallback.bestScore = Math.max(fallback.bestScore, Number(best?.score || 0));
+
+      const uiStructureAbsent = hud.edge < 0.025 && player.edge < 0.035;
+      if (uiStructureAbsent) {
+        if (!fallback.hiddenSinceMs) fallback.hiddenSinceMs = now;
+        fallback.lastHiddenMs = now;
+        fallback.visibleCount = 0;
+        fallback.firstVisibleMs = 0;
+        fallback.whiteCount = 0;
+      } else if (fallback.hiddenSinceMs && fallback.lastHiddenMs) {
+        const hiddenDurationMs = fallback.lastHiddenMs - fallback.hiddenSinceMs;
+        const minimumHiddenMs = phase === "P4" ? 450 : 1800;
+        if (hiddenDurationMs >= minimumHiddenMs && hud.visible) {
+          if (!fallback.visibleCount) fallback.firstVisibleMs = now;
+          fallback.visibleCount += 1;
+          if (phase === "P4" && stage.white) fallback.whiteCount += 1;
+          const visibleStableMs = now - fallback.firstVisibleMs;
+          const confirmed = fallback.visibleCount >= 3
+            && visibleStableMs >= 280
+            && (phase !== "P4" || fallback.whiteCount >= 3);
+          if (confirmed) {
+            const startMs = fallback.firstVisibleMs || now;
+            postEvent({
+              event_type: "phase_multi_signal_fallback",
+              phase,
+              mode: phase === "P4" ? "ui_structure_to_white_hud" : "ui_structure_to_hud",
+              best_score: Number(fallback.bestScore.toFixed(6)),
+              hidden_duration_ms: Number(hiddenDurationMs.toFixed(1)),
+              hud_visible: hud.visible,
+              player_ui_visible: player.visible,
+              timer_visible: timer.visible,
+              boss_hp_visible: boss.visible,
+              stage_mean: Number(stage.mean.toFixed(3)),
+            });
+            state.confirm = null;
+            resetTransitionFallback();
+            startPhase(phase, startMs, phase === "P4" ? "auto_white_hud_return" : "auto_hud_return");
+            return;
+          }
+        } else if (now - fallback.lastHiddenMs > 1200) {
+          resetTransitionFallback(phase);
+        }
+      } else {
+        fallback.visibleCount = 0;
+        fallback.firstVisibleMs = 0;
+        fallback.whiteCount = 0;
+      }
+
+      if (now - state.lastScanTelemetryMs >= 5000) {
+        state.lastScanTelemetryMs = now;
+        postEvent({
+          event_type: "scan_status",
+          phase: state.activePhase,
+          expected_phase: phase,
+          best_score: Number(best?.score?.toFixed(6) || 0),
+          template: best?.name || "",
+          hud_visible: hud.visible,
+          player_ui_visible: player.visible,
+          timer_visible: timer.visible,
+          boss_hp_visible: boss.visible,
+          stage_dark: stage.dark,
+          stage_white: stage.white,
+          fallback_armed: Boolean(fallback.hiddenSinceMs && fallback.lastHiddenMs
+            && fallback.lastHiddenMs - fallback.hiddenSinceMs >= (phase === "P4" ? 450 : 1800)),
+        });
+      }
+    }
+
+    function updateCaptureText() {
+      const video = els.video;
+      if (!video.videoWidth || !video.videoHeight) {
+        setText("capture", "-");
+        return;
+      }
+      const time = state.sourceMode === "baseline" || state.sourceMode === "selftest"
+        ? ` @ ${fmt(video.currentTime)}`
+        : "";
+      const content = contentRectForProfile();
+      const crop = content.width === video.videoWidth && content.height === video.videoHeight
+        ? ""
+        : ` -> ${content.width}x${content.height} @ ${content.left},${content.top}`;
+      setText("capture", `${video.videoWidth}x${video.videoHeight}${crop}${time}`, "ok");
+    }
+
+    async function loadImage(url) {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = staticAssetUrl(url);
+      await img.decode();
+      return img;
+    }
+
+    function staticAssetUrl(path) {
+      const value = String(path || "").trim();
+      if (!value || /^(?:https?:|blob:|data:)/i.test(value)) return value;
+      return new URL(value.replace(/^\/+/, ""), STATIC_ASSET_BASE_URL).href;
+    }
+
+    async function loadTemplates() {
+      const detector = state.assets.detector;
+      const canvas = els.templateCanvas;
+      canvas.width = detector.match_width;
+      canvas.height = detector.match_height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      let count = 0;
+      for (const phase of PHASE_ORDER) {
+        state.templatesByPhase[phase] = [];
+        for (const item of state.assets.phases[phase]?.templates || []) {
+          if (item.usable === false) continue;
+          const img = await loadImage(item.url);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const stats = imageStats(imageData);
+          const vector = standardizeImageData(imageData);
+          if (!vector) continue;
+          state.templatesByPhase[phase].push({ ...item, vector, browserStd: stats.std, browserEdge: stats.edge });
+          count += 1;
+        }
+      }
+      return count;
+    }
+
+    async function loadAssets() {
+      setText("status", "載入資料");
+      const response = await fetch(staticAssetUrl("web-live-assets.json"), { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText);
+      if (IS_GITHUB_PAGES && data.baseline_replay) {
+        data.baseline_replay = { ...data.baseline_replay, available: false, url: "" };
+      }
+      state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
+      applyStoredTimelineChanges(data);
+      appendStoredCustomCues(data);
+      editorState.customSkillTexts = new Set(readStoredCustomSkills());
+      state.assets = data;
+      for (const phase of PHASE_ORDER) {
+        state.timelineByPhase[phase] = data.timeline
+          .filter((cue) => cue.enabled && !cue.deleted && cue.phase === phase)
+          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      }
+      const count = await loadTemplates();
+      const thresholdOverride = Number(new URLSearchParams(location.search).get("threshold"));
+      state.threshold = Number.isFinite(thresholdOverride) && thresholdOverride >= 0.7
+        ? thresholdOverride
+        : Number(localStorage.getItem("blackMageWeb2Threshold") || 0.84);
+      state.extraLeadS = Number(localStorage.getItem("blackMageWeb2ExtraLeadS") || 0);
+      state.volume = Number(localStorage.getItem("blackMageWeb2Volume") || 1);
+      state.audioMuted = localStorage.getItem("blackMageWeb2Muted") === "true";
+      editorState.voiceEnabled = localStorage.getItem("blackMageEditorVoiceEnabled") !== "false";
+      els.editorYoutubeInput.value = localStorage.getItem(EDITOR_YOUTUBE_KEY) || DEFAULT_EDITOR_YOUTUBE_URL;
+      els.thresholdInput.value = state.threshold.toFixed(2);
+      els.leadInput.value = state.extraLeadS.toFixed(1);
+      els.volumeInput.value = Math.round(state.volume * 100);
+      els.muteInput.checked = state.audioMuted;
+      els.editorVoiceInput.checked = editorState.voiceEnabled;
+      els.volumeText.textContent = `${Math.round(state.volume * 100)}%`;
+      setText("status", "等待 P1 過場", "ok");
+      els.topStatus.textContent = `模板 ${count}，語音 ${data.timeline_enabled_count} 句`;
+      renderPhaseCards();
+      renderTimeline();
+      initializeEditorData(data);
+      loadEditorBaseline();
+      const hasBaseline = Boolean(data.baseline_replay?.available);
+      els.editorBaselineBtn.hidden = !hasBaseline;
+      updateAudioStatus();
+      startTicker();
+      log(`載入完成：模板 ${count}，提示 ${data.timeline_enabled_count} 句`, "ok");
+    }
+
+    function startTicker() {
+      if (state.raf) cancelAnimationFrame(state.raf);
+      const tick = (now) => {
+        if (state.pending) updatePending(now);
+        if (state.activePhase) updateScheduler(now);
+        if (state.running) {
+          if (now - state.lastScanMs >= 100) {
+            state.lastScanMs = now;
+            scan(now);
+          }
+          updateCaptureText();
+        }
+        updateTimerText(now);
+        updatePrompter(now);
+        updateEditorPlayback();
+        renderPhaseCards();
+        state.raf = requestAnimationFrame(tick);
+      };
+      state.raf = requestAnimationFrame(tick);
+    }
+
+    function videoReady() {
+      return els.video.readyState >= 2 && els.video.videoWidth > 0 && els.video.videoHeight > 0;
+    }
+
+    function scan(now) {
+      if (!state.assets || !videoReady() || state.pending || expectedPhase() === "-") return;
+      if (!state.contentRectLock && contentRectCandidates().length > 1) {
+        if (now - state.lastWideSearchMs < 200) return;
+        state.lastWideSearchMs = now;
+      }
+      let best = null;
+      try {
+        best = matchExpectedPhase();
+      } catch (error) {
+        log(`畫面讀取失敗：${error.message}`, "badText");
+        return;
+      }
+      if (best) {
+        setText("score", `${best.phase} ${best.score.toFixed(3)}`, best.score >= state.threshold ? "ok" : "");
+        const threshold = state.threshold;
+        if (best.score >= threshold) {
+          if (!state.confirm || state.confirm.phase !== best.phase) {
+            state.confirm = { phase: best.phase, count: 1, best, bestMs: now };
+          } else {
+            state.confirm.count += 1;
+            if (best.score > state.confirm.best.score) {
+              state.confirm.best = best;
+              state.confirm.bestMs = now;
+            }
+          }
+          if (state.confirm.count >= 3) {
+            const confirmed = state.confirm;
+            state.confirm = null;
+            handleDetection(confirmed.best, confirmed.bestMs);
+          }
+        } else {
+          state.confirm = null;
+        }
+      } else {
+        state.confirm = null;
+      }
+      updateP1HudFallback(now, best);
+      updatePhaseTransitionFallback(now, best);
+    }
+
+    function handleDetection(best, detectedMs) {
+      resetTransitionFallback();
+      const phase = best.phase;
+      const phaseConfig = state.assets.phases[phase] || {};
+      const cutsceneStartMs = detectedMs - Number(best.offset_seconds || 0) * 1000;
+      const hudMs = cutsceneStartMs + Number(phaseConfig.start_to_hud_visible_ms || 0);
+      state.pending = {
+        phase,
+        hudMs,
+        detectedMs,
+        score: best.score,
+        template: best.name,
+        startedWaitMs: performance.now(),
+      };
+      state.expectedIndex = Math.max(state.expectedIndex, PHASE_ORDER.indexOf(phase) + 1);
+      setText("status", `${phase} 過場已抓到`, "warnText");
+      log(`${phase} 過場：${best.score.toFixed(3)}，等待 HUD 起算`, "ok");
+      postEvent({
+        event_type: "cutscene_detected",
+        phase,
+        score: Number(best.score.toFixed(6)),
+        template: best.name,
+        offset_seconds: Number(best.offset_seconds || 0),
+        hud_starts_in: Number(((hudMs - performance.now()) / 1000).toFixed(3)),
+      });
+    }
+
+    function updatePending(now) {
+      const pending = state.pending;
+      if (!pending) return;
+      const remain = (pending.hudMs - now) / 1000;
+      if (remain > 0) {
+        setText("status", `${pending.phase} 過場 ${remain.toFixed(1)}s`, "warnText");
+        return;
+      }
+      const hud = readHudVisible();
+      if (hud.visible) {
+        startPhase(pending.phase, now, "auto_hud");
+        return;
+      }
+      const waited = now - pending.hudMs;
+      if (waited >= 1200) {
+        startPhase(pending.phase, now, "auto_estimate_after_wait");
+      }
+    }
+
+    function startPhase(phase, startMs, reason = "manual") {
+      resetP1HudFallback();
+      resetTransitionFallback();
+      for (const key of [...state.playedKeys]) {
+        if (key.startsWith(`${phase}:`)) state.playedKeys.delete(key);
+      }
+      state.activePhase = phase;
+      state.phaseStartMs = startMs;
+      state.pending = null;
+      state.activeCues = [...(state.timelineByPhase[phase] || [])]
+        .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      state.cueIndex = 0;
+      state.expectedIndex = Math.max(state.expectedIndex, PHASE_ORDER.indexOf(phase) + 1);
+      state.currentCue = null;
+      state.currentCueUntilMs = 0;
+      setText("phase", phase, "ok");
+      setText("status", `${phase} 計時中`, "ok");
+      log(`${phase} 開始計時 (${reason})`, "ok");
+      postEvent({
+        event_type: "phase_start",
+        phase,
+        reason,
+        enabled_cue_count: state.activeCues.length,
+      });
+      updateNextCallout(performance.now());
+      renderTimeline();
+    }
+
+    function manualStart(phase) {
+      startPhase(phase, performance.now(), "manual");
+    }
+
+    function updateScheduler(now) {
+      if (!state.activePhase || !state.activeCues.length) return;
+      const elapsed = (now - state.phaseStartMs) / 1000;
+      const lateSkipS = Number(state.assets?.callouts?.late_skip_ms || 800) / 1000;
+      while (state.cueIndex < state.activeCues.length) {
+        const cue = state.activeCues[state.cueIndex];
+        const scheduled = effectiveScheduledS(cue);
+        if (elapsed + 0.03 < scheduled) break;
+        const late = elapsed - scheduled;
+        state.cueIndex += 1;
+        if (late <= lateSkipS || scheduled === 0) {
+          playCue(cue, elapsed, late);
+        } else {
+          log(`略過過期提示 ${cue.phase}#${cue.cue_index} ${cue.text} late=${late.toFixed(3)}s`, "warnText");
+          postEvent({
+            event_type: "callout_skip_late",
+            phase: cue.phase,
+            cue_index: cue.cue_index,
+            text: cue.text,
+            scheduled_phase_s: Number(scheduled.toFixed(3)),
+            elapsed_phase_s: Number(elapsed.toFixed(3)),
+            late_s: Number(late.toFixed(3)),
+          });
+        }
+      }
+      updateNextCallout(now);
+    }
+
+    function updateNextCallout(now) {
+      if (!state.activePhase) {
+        els.calloutNext.textContent = "下一句：-";
+        return;
+      }
+      const cue = state.activeCues[state.cueIndex];
+      if (!cue) {
+        els.calloutNext.textContent = "下一句：本階段提示已播完";
+        return;
+      }
+      const elapsed = (now - state.phaseStartMs) / 1000;
+      const remain = Math.max(0, effectiveScheduledS(cue) - elapsed);
+      els.calloutNext.textContent = `下一句：${remain.toFixed(1)}s ${cue.phase}#${cue.cue_index} ${cue.text}`;
+    }
+
+    function updateTimerText(now) {
+      if (state.activePhase) {
+        setText("phaseTime", fmt((now - state.phaseStartMs) / 1000), "ok");
+        updateNextCallout(now);
+      }
+      setText("expected", expectedPhase());
+    }
+
+    async function waitForVideoReady() {
+      if (videoReady()) return;
+      await new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("影片來源沒有畫面")), 6000);
+        const finish = () => {
+          window.clearTimeout(timer);
+          resolve();
+        };
+        const fail = () => {
+          window.clearTimeout(timer);
+          reject(new Error("影片來源載入失敗"));
+        };
+        els.video.addEventListener("loadeddata", finish, { once: true });
+        els.video.addEventListener("error", fail, { once: true });
+      });
+    }
+
+    function startAudioLoading() {
+      unlockAudio().catch((error) => log(`語音初始化失敗：${error.message}`, "badText"));
+      preloadAudio().catch((error) => log(`語音預載失敗：${error.message}`, "badText"));
+    }
+
+    function primeAudioFromGesture() {
+      try {
+        const audioContext = ensureAudioContext();
+        if (audioContext.state !== "running") audioContext.resume().catch(() => {});
+      } catch (_) {}
+    }
+
+    async function startShare() {
+      try {
+        stopSource();
+        startAudioLoading();
+        const streamPromise = navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 } },
+          audio: false,
+        });
+        const stream = await streamPromise;
+        state.stream = stream;
+        state.sourceMode = "screen";
+        els.video.srcObject = stream;
+        els.video.muted = true;
+        els.video.controls = false;
+        els.video.autoplay = true;
+        await waitForVideoReady();
+        await els.video.play();
+        state.running = true;
+        els.placeholder.style.display = "none";
+        resetRun();
+        setText("status", "等待 P1 過場", "ok");
+        log("畫面分享已開始", "ok");
+        postEvent({ event_type: "screen_share_start", phase: "" });
+        stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+          stopSource();
+        });
+      } catch (error) {
+        setText("status", "分享失敗", "badText");
+        log(`分享畫面失敗：${error.message}`, "badText");
+      }
+    }
+
+    async function startBaseline() {
+      try {
+        stopSource();
+        startAudioLoading();
+        state.sourceMode = "baseline";
+        els.video.srcObject = null;
+        els.video.src = state.assets.baseline_replay.url;
+        els.video.muted = false;
+        els.video.controls = true;
+        els.video.autoplay = true;
+        els.video.load();
+        await waitForVideoReady();
+        resetRun();
+        state.running = true;
+        els.placeholder.style.display = "none";
+        try {
+          await els.video.play();
+        } catch (_) {
+          els.video.muted = true;
+          await els.video.play();
+          log("瀏覽器阻擋影片原音，已改為靜音播放；提示語音仍會播放", "warnText");
+        }
+        log("基準影片測試開始", "ok");
+        postEvent({ event_type: "baseline_start", phase: "" });
+      } catch (error) {
+        setText("status", "影片失敗", "badText");
+        log(`基準影片失敗：${error.message}`, "badText");
+      }
+    }
+
+    async function seekVideo(seconds) {
+      const target = Math.max(0, Math.min(Number(seconds || 0), Math.max(0, els.video.duration - 0.05)));
+      if (Math.abs(els.video.currentTime - target) < 0.002) return;
+      await new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error(`跳轉影片逾時 ${target.toFixed(3)}s`)), 5000);
+        const done = () => {
+          window.clearTimeout(timer);
+          resolve();
+        };
+        els.video.addEventListener("seeked", done, { once: true });
+        els.video.currentTime = target;
+      });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+
+    async function runSelfTest() {
+      try {
+        stopSource();
+        state.sourceMode = "selftest";
+        state.selfTesting = true;
+        els.video.srcObject = null;
+        els.video.src = state.assets.baseline_replay.url;
+        els.video.muted = true;
+        els.video.controls = false;
+        els.video.load();
+        await waitForVideoReady();
+        els.placeholder.style.display = "none";
+        setText("status", "快速自測中", "warnText");
+        const results = [];
+        for (let index = 0; index < PHASE_ORDER.length; index += 1) {
+          const phase = PHASE_ORDER[index];
+          const hint = state.assets.baseline_replay?.phase_hints?.[phase] || {};
+          const probeS = Number(hint.matched_video_s || (Number(hint.cutscene_start_s || 0) + 2));
+          state.expectedIndex = index;
+          await seekVideo(probeS);
+          const best = matchExpectedPhase();
+          const hudProbeS = Number(hint.gate_start_s || hint.estimated_hud_s || probeS);
+          await seekVideo(hudProbeS);
+          const hud = readHudVisible();
+          const passed = Boolean(best && best.phase === phase && best.score >= state.threshold && hud.visible);
+          const result = {
+            phase,
+            probeS,
+            hudProbeS,
+            score: best?.score || -1,
+            template: best?.name || "-",
+            hudVisible: hud.visible,
+            hudColor: hud.color,
+            hudEdge: hud.edge,
+            passed,
+          };
+          results.push(result);
+          setText("score", `${phase} ${result.score.toFixed(3)}`, passed ? "ok" : "badText");
+          log(
+            `自測 ${phase}：過場 ${result.score.toFixed(3)}，HUD ${hud.visible ? "通過" : "失敗"} ${hud.color.toFixed(2)}/${hud.edge.toFixed(2)}`,
+            passed ? "ok" : "badText",
+          );
+        }
+        const passedCount = results.filter((item) => item.passed).length;
+        state.expectedIndex = 0;
+        state.selfTesting = false;
+        await seekVideo(0.001);
+        setText("expected", "P1");
+        setText("status", `自測 ${passedCount}/4 ${passedCount === 4 ? "通過" : "失敗"}`, passedCount === 4 ? "ok" : "badText");
+        els.topStatus.textContent = results.map((item) => `${item.phase} ${item.score.toFixed(3)}`).join(" | ");
+        postEvent({ event_type: "browser_self_test", phase: "", passed: passedCount, results });
+      } catch (error) {
+        state.selfTesting = false;
+        setText("status", "自測失敗", "badText");
+        log(`快速自測失敗：${error.message}`, "badText");
+      }
+    }
+
+    function editorCueKey(cue) {
+      return `${cue.phase}:${cue.cue_index}`;
+    }
+
+    function editorCueByKey(key) {
+      return editorState.cues.find((cue) => editorCueKey(cue) === key) || null;
+    }
+
+    function editorPhaseCues() {
+      return editorState.cues
+        .filter((cue) => cue.phase === editorState.phase && !cue.deleted)
+        .sort((a, b) => Number(a.start_s || 0) - Number(b.start_s || 0) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+    }
+
+    function editorScheduledS(cue) {
+      return Math.max(0, Number(cue.start_s || 0) + Number(cue.offset_s || 0) - Number(cue.lead_s || 0));
+    }
+
+    function initializeEditorData(data, preserveAlignment = false) {
+      const previousPhase = editorState.phase;
+      const previousSelected = editorState.selectedKey;
+      const previousHudTimes = { ...editorState.hudTimes };
+      editorState.cues = (data.timeline || []).map((cue) => ({ ...cue }));
+      editorState.originalByKey = new Map(editorState.cues.map((cue) => [editorCueKey(cue), {
+        text: String(cue.text || ""),
+        start_s: Number(cue.start_s || 0),
+        lead_s: Number(cue.lead_s || 0),
+        enabled: Boolean(cue.enabled),
+        deleted: Boolean(cue.deleted),
+        custom: Boolean(cue.custom),
+      }]));
+      editorState.dirtyKeys = new Set();
+      editorState.voicePlayedKeys = new Set();
+      editorState.voiceArmedKey = "";
+      editorState.voiceArmedAtS = Number.NaN;
+      editorState.playbackCueKey = "";
+      editorState.playbackPhase = "";
+      editorState.phase = PHASE_ORDER.includes(previousPhase) ? previousPhase : "P1";
+      editorState.hudTimes = {};
+      for (const phase of PHASE_ORDER) {
+        if (preserveAlignment && Number.isFinite(previousHudTimes[phase])) {
+          editorState.hudTimes[phase] = previousHudTimes[phase];
+        }
+      }
+      editorState.selectedKey = editorCueByKey(previousSelected)
+        ? previousSelected
+        : editorCueKey(editorPhaseCues()[0] || { phase: editorState.phase, cue_index: 0 });
+      renderEditor();
+    }
+
+    function setAppMode(mode) {
+      const editing = mode === "editor";
+      document.body.classList.toggle("editor-mode", editing);
+      document.body.classList.remove("focus-prompter");
+      els.prompterFocusBtn.textContent = "專注提詞";
+      els.liveModeBtn.classList.toggle("active", !editing);
+      els.editorModeBtn.classList.toggle("active", editing);
+      els.liveModeBtn.setAttribute("aria-selected", String(!editing));
+      els.editorModeBtn.setAttribute("aria-selected", String(editing));
+      if (editing) {
+        if (state.running || state.stream || state.activePhase || state.pending || els.video.currentSrc) stopSource();
+        if (!editorHasSource()) loadEditorBaseline();
+        if (editorState.voiceEnabled) startAudioLoading();
+        renderEditor();
+      } else {
+        editorPause();
+        if (!state.running && !state.activePhase) resetRun();
+      }
+    }
+
+    function togglePrompterFocus() {
+      const focused = document.body.classList.toggle("focus-prompter");
+      els.prompterFocusBtn.textContent = focused ? "退出專注" : "專注提詞";
+    }
+
+    function parseYoutubeVideoId(value) {
+      let raw = String(value || "").trim();
+      if (!raw) return "";
+      const iframeSource = raw.match(/\bsrc=["']([^"']+)["']/i);
+      if (iframeSource) raw = iframeSource[1];
+      if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = `https://${raw}`;
+      try {
+        const url = new URL(raw);
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+        let id = "";
+        if (host === "youtu.be") {
+          id = url.pathname.split("/").filter(Boolean)[0] || "";
+        } else if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtube-nocookie.com") {
+          if (url.pathname === "/watch") id = url.searchParams.get("v") || "";
+          if (!id) {
+            const match = url.pathname.match(/^\/(?:embed|live|shorts|v)\/([A-Za-z0-9_-]{11})(?:\/|$)/);
+            id = match?.[1] || "";
+          }
+        }
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : "";
+      } catch (_) {
+        return "";
+      }
+    }
+
+    function loadYoutubeIframeApi() {
+      if (window.YT?.Player) return Promise.resolve(window.YT);
+      if (editorState.youtubeApiPromise) return editorState.youtubeApiPromise;
+      editorState.youtubeApiPromise = new Promise((resolve, reject) => {
+        const previousReady = window.onYouTubeIframeAPIReady;
+        const timeoutId = window.setTimeout(() => {
+          editorState.youtubeApiPromise = null;
+          reject(new Error("YouTube 播放器載入逾時"));
+        }, 15000);
+        window.onYouTubeIframeAPIReady = () => {
+          window.clearTimeout(timeoutId);
+          if (typeof previousReady === "function") previousReady();
+          resolve(window.YT);
+        };
+        let script = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+        if (!script) {
+          script = document.createElement("script");
+          script.src = "https://www.youtube.com/iframe_api";
+          script.async = true;
+          script.onerror = () => {
+            window.clearTimeout(timeoutId);
+            editorState.youtubeApiPromise = null;
+            reject(new Error("無法載入 YouTube 播放器"));
+          };
+          document.head.appendChild(script);
+        }
+      });
+      return editorState.youtubeApiPromise;
+    }
+
+    function editorUsesYoutube() {
+      return editorState.sourceMode === "youtube";
+    }
+
+    function editorUsesBaselineYoutube() {
+      return editorUsesYoutube()
+        && editorState.youtubeVideoId === parseYoutubeVideoId(DEFAULT_EDITOR_YOUTUBE_URL);
+    }
+
+    function editorHasSource() {
+      if (editorUsesYoutube()) return Boolean(editorState.youtubeVideoId);
+      return Boolean(els.editorVideo.currentSrc);
+    }
+
+    function editorCurrentTime() {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { return Number(editorState.youtubePlayer.getCurrentTime() || 0); } catch (_) { return 0; }
+      }
+      return Number(els.editorVideo.currentTime || 0);
+    }
+
+    function editorDuration() {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { return Number(editorState.youtubePlayer.getDuration() || 0); } catch (_) { return 0; }
+      }
+      return Number(els.editorVideo.duration || 0);
+    }
+
+    function editorPaused() {
+      if (editorUsesYoutube()) return editorState.youtubeState !== 1;
+      return els.editorVideo.paused;
+    }
+
+    function editorMuted() {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { return Boolean(editorState.youtubePlayer.isMuted()); } catch (_) { return false; }
+      }
+      return Boolean(els.editorVideo.muted);
+    }
+
+    function editorPlaybackRate() {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { return Number(editorState.youtubePlayer.getPlaybackRate() || 1); } catch (_) { return 1; }
+      }
+      return Number(els.editorVideo.playbackRate || 1);
+    }
+
+    function editorSetMuted(muted) {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try {
+          if (muted) editorState.youtubePlayer.mute();
+          else editorState.youtubePlayer.unMute();
+        } catch (_) {}
+        return;
+      }
+      els.editorVideo.muted = Boolean(muted);
+    }
+
+    function editorSetPlaybackRate(rate) {
+      if (!Number.isFinite(Number(rate))) return;
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { editorState.youtubePlayer.setPlaybackRate(Number(rate)); } catch (_) {}
+        return;
+      }
+      els.editorVideo.playbackRate = Number(rate);
+    }
+
+    function editorPause() {
+      if (editorUsesYoutube() && editorState.youtubeReady) {
+        try { editorState.youtubePlayer.pauseVideo(); } catch (_) {}
+        return;
+      }
+      els.editorVideo.pause();
+    }
+
+    function editorPlay() {
+      if (editorUsesYoutube()) {
+        if (!editorState.youtubeReady) return Promise.reject(new Error("YouTube 播放器尚未就緒"));
+        try {
+          editorState.youtubePlayer.playVideo();
+          return Promise.resolve();
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      }
+      return els.editorVideo.play();
+    }
+
+    function setEditorSourceSurface(mode) {
+      const youtube = mode === "youtube";
+      els.editorVideo.hidden = youtube;
+      els.editorYoutubeWrap.hidden = !youtube;
+    }
+
+    function destroyEditorYoutubePlayer() {
+      const player = editorState.youtubePlayer;
+      editorState.youtubePlayer = null;
+      editorState.youtubeReady = false;
+      editorState.youtubeState = -1;
+      if (player) {
+        try { player.destroy(); } catch (_) {}
+      }
+      const host = document.createElement("div");
+      host.id = "editorYoutubePlayer";
+      els.editorYoutubeWrap.replaceChildren(host);
+    }
+
+    function clearEditorPhaseAnchors(message = "等待偵測階段") {
+      editorState.detectionToken += 1;
+      editorState.detecting = false;
+      editorState.hudTimes = {};
+      editorState.phaseMethods = {};
+      editorState.voiceArmedKey = "";
+      editorState.voiceArmedAtS = Number.NaN;
+      editorState.playbackCueKey = "";
+      editorState.playbackPhase = "";
+      els.editorDetectPhasesBtn.disabled = false;
+      els.editorPhaseStatus.textContent = message;
+      renderEditor();
+    }
+
+    function loadEditorBaseline() {
+      editorPause();
+      editorState.sourceMode = "baseline";
+      destroyEditorYoutubePlayer();
+      setEditorSourceSurface("baseline");
+      if (!state.assets?.baseline_replay?.available) {
+        editorState.sourceMode = "";
+        clearEditorPhaseAnchors("找不到基準影片");
+        els.editorVideo.removeAttribute("src");
+        els.editorVideo.load();
+        editorState.sourceName = "";
+        els.editorVideoName.textContent = "請貼上 YouTube 影片網址";
+        return;
+      }
+      clearEditorPhaseAnchors("載入後由畫面偵測");
+      els.editorVideo.src = state.assets.baseline_replay.url;
+      els.editorVideo.load();
+      editorState.sourceName = state.assets.baseline_replay.name || "-O4WH-sTv4w - 拳霸老黑.mp4";
+      els.editorVideoName.textContent = editorState.sourceName;
+    }
+
+    async function loadEditorYoutube(rawUrl) {
+      const videoId = parseYoutubeVideoId(rawUrl);
+      if (!videoId) {
+        setEditorStatus("YouTube 網址格式不正確", "dirty");
+        els.editorPhaseStatus.textContent = "無法辨識 YouTube 影片";
+        return;
+      }
+      editorPause();
+      editorState.sourceMode = "youtube";
+      destroyEditorYoutubePlayer();
+      els.editorVideo.removeAttribute("src");
+      els.editorVideo.load();
+      setEditorSourceSurface("youtube");
+      editorState.youtubeVideoId = videoId;
+      editorState.youtubeUrl = `https://youtu.be/${videoId}`;
+      editorState.sourceName = `YouTube · ${videoId}`;
+      localStorage.setItem(EDITOR_YOUTUBE_KEY, editorState.youtubeUrl);
+      els.editorYoutubeInput.value = editorState.youtubeUrl;
+      els.editorVideoName.textContent = editorState.sourceName;
+      clearEditorPhaseAnchors("正在載入 YouTube 播放器");
+      els.editorDetectPhasesBtn.disabled = true;
+      try {
+        const YT = await loadYoutubeIframeApi();
+        if (!editorUsesYoutube() || editorState.youtubeVideoId !== videoId) return;
+        editorState.youtubePlayer = new YT.Player("editorYoutubePlayer", {
+          width: "100%",
+          height: "100%",
+          videoId,
+          playerVars: {
+            controls: 1,
+            enablejsapi: 1,
+            playsinline: 1,
+            rel: 0,
+            origin: location.origin,
+          },
+          events: {
+            onReady: (event) => {
+              if (!editorUsesYoutube() || editorState.youtubeVideoId !== videoId) return;
+              editorState.youtubeReady = true;
+              editorState.youtubeState = Number(event.target.getPlayerState());
+              els.editorDetectPhasesBtn.disabled = false;
+              resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+              if (editorUsesBaselineYoutube()) {
+                applyEditorPhaseAnchors(
+                  state.assets?.baseline_replay?.phase_hints || {},
+                  {},
+                  "已套用基準 YouTube 校正",
+                );
+              } else {
+                els.editorPhaseStatus.textContent = "YouTube 已載入，可自動校正階段";
+                renderEditor();
+              }
+            },
+            onStateChange: (event) => {
+              if (!editorUsesYoutube() || editorState.youtubeVideoId !== videoId) return;
+              editorState.youtubeState = Number(event.data);
+              if (editorState.detecting) return;
+              if (event.data === 1) handleEditorVoicePlay();
+              else if (event.data === 3) handleEditorVoiceSeeking();
+              else if (event.data === 2) handleEditorVoicePause();
+              else if (event.data === 0) handleEditorVoiceEnded();
+            },
+            onError: (event) => {
+              if (!editorUsesYoutube() || editorState.youtubeVideoId !== videoId) return;
+              els.editorDetectPhasesBtn.disabled = false;
+              els.editorPhaseStatus.textContent = `YouTube 播放器錯誤 ${event.data}`;
+            },
+          },
+        });
+      } catch (error) {
+        if (!editorUsesYoutube() || editorState.youtubeVideoId !== videoId) return;
+        els.editorDetectPhasesBtn.disabled = false;
+        els.editorPhaseStatus.textContent = error.message;
+        setEditorStatus(error.message, "dirty");
+      }
+    }
+
+    function delay(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    function editorDetectionVideo() {
+      return editorUsesYoutube() ? els.editorCaptureVideo : els.editorVideo;
+    }
+
+    function updateEditorScanProgress(phase, seconds, duration) {
+      const text = `畫面偵測 ${phase} · ${fmt(seconds)} / ${fmt(duration)}`;
+      els.editorPhaseStatus.textContent = text;
+      if (editorUsesYoutube()) document.title = `${phase} ${fmt(seconds)} · 自動校正`;
+    }
+
+    async function beginEditorYoutubeCapture(token) {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        throw new Error("此瀏覽器不支援分頁畫面分享");
+      }
+      editorState.captureEnded = false;
+      editorState.titleBeforeScan = document.title;
+      document.body.classList.add("youtube-scan-active");
+      document.title = "請分享目前分頁 · 黑魔法師自動校正";
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 } },
+          audio: false,
+          preferCurrentTab: true,
+          selfBrowserSurface: "include",
+          surfaceSwitching: "exclude",
+        });
+      } catch (error) {
+        document.body.classList.remove("youtube-scan-active");
+        document.title = editorState.titleBeforeScan || "黑魔法師招式提示機";
+        throw new Error(error?.name === "NotAllowedError" ? "未分享目前分頁，無法自動校正" : error.message);
+      }
+      if (token !== editorState.detectionToken) {
+        for (const track of stream.getTracks()) track.stop();
+        throw new Error("階段偵測已取消");
+      }
+      editorState.captureStream = stream;
+      const [track] = stream.getVideoTracks();
+      if (!track) throw new Error("沒有取得分頁畫面");
+      const displaySurface = String(track.getSettings?.().displaySurface || "");
+      if (displaySurface && displaySurface !== "browser") {
+        throw new Error("請選擇分享「這個分頁」，不要分享整個螢幕或視窗");
+      }
+      track.addEventListener("ended", () => { editorState.captureEnded = true; }, { once: true });
+      els.editorCaptureVideo.srcObject = stream;
+      await els.editorCaptureVideo.play();
+      const started = performance.now();
+      while (els.editorCaptureVideo.readyState < 2 || !els.editorCaptureVideo.videoWidth) {
+        if (editorState.captureEnded || token !== editorState.detectionToken) throw new Error("分頁畫面分享已停止");
+        if (performance.now() - started > 5000) throw new Error("分頁畫面載入逾時");
+        await delay(50);
+      }
+      await delay(250);
+    }
+
+    function endEditorYoutubeCapture() {
+      if (editorState.captureStream) {
+        for (const track of editorState.captureStream.getTracks()) track.stop();
+      }
+      editorState.captureStream = null;
+      editorState.captureEnded = false;
+      els.editorCaptureVideo.pause();
+      els.editorCaptureVideo.srcObject = null;
+      document.body.classList.remove("youtube-scan-active");
+      document.title = editorState.titleBeforeScan || "黑魔法師招式提示機";
+      editorState.titleBeforeScan = "";
+    }
+
+    async function waitForEditorYoutubeDuration(token) {
+      const started = performance.now();
+      while (token === editorState.detectionToken && editorDuration() <= 0) {
+        try {
+          editorState.youtubePlayer.mute();
+          editorState.youtubePlayer.playVideo();
+        } catch (_) {}
+        if (performance.now() - started > 8000) throw new Error("無法取得 YouTube 影片長度");
+        await delay(100);
+      }
+      editorPause();
+      return token === editorState.detectionToken;
+    }
+
+    async function primeEditorYoutubeForScan(token) {
+      const initialS = editorCurrentTime();
+      const started = performance.now();
+      try {
+        editorState.youtubePlayer.mute();
+        editorState.youtubePlayer.playVideo();
+      } catch (_) { return; }
+      while (token === editorState.detectionToken && performance.now() - started < 3500) {
+        if (editorState.captureEnded) return;
+        if (editorState.youtubeState === 1 && editorCurrentTime() >= initialS + 0.18) break;
+        await delay(50);
+      }
+      editorPause();
+      await delay(180);
+    }
+
+    function editorFrameSignals() {
+      const video = editorDetectionVideo();
+      const base = fitProfileContentRect(video);
+      const hud = regionMetricsForVideo(video, "hud", base);
+      const player = regionMetricsForVideo(video, "player", base);
+      const timer = regionMetricsForVideo(video, "timer", base);
+      const boss = regionMetricsForVideo(video, "boss", base);
+      const stage = regionMetricsForVideo(video, "stage", base);
+      const hudCfg = state.assets.detector.hud_visible || {};
+      const bossCfg = state.assets.detector.boss_hp_visible || {};
+      const hudVisible = hud.color >= Number(hudCfg.skill_color_threshold || 0.15)
+        && hud.edge >= Number(hudCfg.skill_edge_threshold || 0.05);
+      const timerVisible = timer.neutral >= 0.05
+        && timer.neutral <= 0.65
+        && timer.mean >= 40
+        && timer.mean <= 170;
+      const bossVisible = boss.color >= Number(bossCfg.red_threshold || 0.008)
+        && boss.edge >= Number(bossCfg.edge_threshold || 0.02);
+      const structureAbsent = editorUsesYoutube()
+        ? !hudVisible && hud.edge < 0.055
+        : hud.edge < 0.025 && player.edge < 0.035;
+      return {
+        hudVisible,
+        timerVisible,
+        bossVisible,
+        structureAbsent,
+        stageWhite: stage.mean >= 145 && stage.neutral >= 0.45,
+        hud,
+        player,
+        timer,
+        boss,
+        stage,
+      };
+    }
+
+    async function seekEditorDetectionFrame(seconds, token) {
+      if (token !== editorState.detectionToken) return false;
+      if (editorUsesYoutube()) {
+        if (!editorState.youtubeReady || editorState.captureEnded) return false;
+        const duration = editorDuration();
+        const target = Math.max(0, Math.min(Number(seconds || 0), Math.max(0, duration - 0.05)));
+        editorPause();
+        try { editorState.youtubePlayer.seekTo(target, true); } catch (_) { return false; }
+        const started = performance.now();
+        let nearSince = 0;
+        while (performance.now() - started <= 3000) {
+          if (token !== editorState.detectionToken || editorState.captureEnded) return false;
+          const current = editorCurrentTime();
+          if (Math.abs(current - target) <= 0.8) {
+            if (!nearSince) nearSince = performance.now();
+            if (performance.now() - nearSince >= 170 && els.editorCaptureVideo.readyState >= 2) return true;
+          } else {
+            nearSince = 0;
+          }
+          await delay(35);
+        }
+        return false;
+      }
+      const video = els.editorVideo;
+      const duration = Number(video.duration || 0);
+      const target = Math.max(0, Math.min(Number(seconds || 0), Math.max(0, duration - 0.01)));
+      if (video.readyState >= 2 && Math.abs(Number(video.currentTime || 0) - target) < 0.006) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        return token === editorState.detectionToken;
+      }
+      return new Promise((resolve) => {
+        let timerId = 0;
+        const finish = (ok) => {
+          window.clearTimeout(timerId);
+          video.removeEventListener("seeked", onSeeked);
+          video.removeEventListener("error", onError);
+          resolve(Boolean(ok && token === editorState.detectionToken));
+        };
+        const onSeeked = () => finish(true);
+        const onError = () => finish(false);
+        timerId = window.setTimeout(() => finish(false), 2500);
+        video.addEventListener("seeked", onSeeked, { once: true });
+        video.addEventListener("error", onError, { once: true });
+        video.currentTime = target;
+      });
+    }
+
+    async function refineEditorYoutubePhaseAnchor(phase, startS, endS, token) {
+      const start = Math.max(0, Number(startS || 0));
+      const end = Math.max(start, Number(endS || start));
+      if (!await seekEditorDetectionFrame(start, token)) return null;
+      let sawStructureAbsent = false;
+      let firstStructureReturnS = null;
+      let firstHudS = null;
+      let firstWhiteS = null;
+      let lastSampleS = Number.NaN;
+      let lastProgressAt = performance.now();
+      editorSetPlaybackRate(1);
+      try { editorState.youtubePlayer.playVideo(); } catch (_) { return null; }
+      try {
+        const deadline = performance.now() + Math.max(7000, (end - start + 4) * 1400);
+        while (performance.now() < deadline) {
+          if (token !== editorState.detectionToken || editorState.captureEnded) return null;
+          await delay(32);
+          const seconds = editorCurrentTime();
+          if (!Number.isFinite(seconds)) continue;
+          if (!Number.isFinite(lastSampleS) || seconds > lastSampleS + 0.012) {
+            lastProgressAt = performance.now();
+          } else if (performance.now() - lastProgressAt > 2500) {
+            return null;
+          }
+          if (Number.isFinite(lastSampleS) && Math.abs(seconds - lastSampleS) < 0.025) continue;
+          lastSampleS = seconds;
+          if (seconds < start - 0.2) continue;
+          if (seconds > end + 0.08) return null;
+          const signals = editorFrameSignals();
+          if (signals.structureAbsent) {
+            sawStructureAbsent = true;
+            firstStructureReturnS = null;
+            firstHudS = null;
+            firstWhiteS = null;
+            continue;
+          }
+          if (sawStructureAbsent && firstStructureReturnS === null) firstStructureReturnS = seconds;
+          if (sawStructureAbsent && signals.hudVisible) {
+            if (firstHudS === null) firstHudS = seconds;
+            if (phase === "P4" && signals.stageWhite && firstWhiteS === null) firstWhiteS = seconds;
+            if (phase === "P4" && !signals.stageWhite) firstWhiteS = null;
+            const hudStable = seconds - firstHudS >= 0.24;
+            const phaseConfirmed = phase !== "P4"
+              || (firstWhiteS !== null && seconds - firstWhiteS >= 0.12);
+            if (hudStable && phaseConfirmed) {
+              const anchorS = phase === "P4" ? firstStructureReturnS : firstHudS;
+              return Number(anchorS.toFixed(3));
+            }
+          } else if (sawStructureAbsent) {
+            firstHudS = null;
+            firstWhiteS = null;
+          }
+        }
+      } finally {
+        editorPause();
+      }
+      return null;
+    }
+
+    async function refineEditorPhaseAnchor(phase, startS, endS, token) {
+      if (editorUsesYoutube()) {
+        return refineEditorYoutubePhaseAnchor(phase, startS, endS, token);
+      }
+      let sawStructureAbsent = false;
+      let firstStructureReturnS = null;
+      let firstHudS = null;
+      let hudCount = 0;
+      let whiteCount = 0;
+      for (let seconds = Math.max(0, startS); seconds <= endS + 0.0001; seconds += 0.04) {
+        if (!await seekEditorDetectionFrame(seconds, token)) return null;
+        const signals = editorFrameSignals();
+        if (signals.structureAbsent) {
+          sawStructureAbsent = true;
+          firstStructureReturnS = null;
+          firstHudS = null;
+          hudCount = 0;
+          whiteCount = 0;
+          continue;
+        }
+        if (sawStructureAbsent && firstStructureReturnS === null) {
+          firstStructureReturnS = seconds;
+        }
+        if (sawStructureAbsent && signals.hudVisible) {
+          if (firstHudS === null) firstHudS = seconds;
+          hudCount += 1;
+          if (phase === "P4" && signals.stageWhite) whiteCount += 1;
+          const phaseConfirmed = phase !== "P4" || whiteCount >= 3;
+          if (hudCount >= 3 && seconds - firstHudS >= 0.28 && phaseConfirmed) {
+            const anchorS = phase === "P4" ? firstStructureReturnS : firstHudS;
+            return Number(anchorS.toFixed(3));
+          }
+        } else if (sawStructureAbsent && !signals.hudVisible) {
+          firstHudS = null;
+          hudCount = 0;
+          whiteCount = 0;
+        }
+      }
+      return null;
+    }
+
+    async function scanEditorPhaseAnchors(token) {
+      const duration = editorDuration();
+      if (!Number.isFinite(duration) || duration <= 0) throw new Error("影片長度無效");
+      const anchors = {};
+      const methods = {};
+      let phaseIndex = 0;
+      let hiddenStartS = null;
+      let lastHiddenS = null;
+      let p4WhiteStartS = null;
+      let p4WhiteCount = 0;
+      let directP1Candidate = false;
+      const coarseStepS = editorUsesYoutube() ? (duration >= 300 ? 4 : 2) : (duration >= 300 ? 2 : 1);
+
+      const acceptAnchor = (phase, seconds, method) => {
+        anchors[phase] = Number(seconds.toFixed(3));
+        methods[phase] = method;
+        phaseIndex += 1;
+        hiddenStartS = null;
+        lastHiddenS = null;
+        p4WhiteStartS = null;
+        p4WhiteCount = 0;
+      };
+
+      for (let seconds = 0; seconds < duration && phaseIndex < PHASE_ORDER.length; seconds += coarseStepS) {
+        if (!await seekEditorDetectionFrame(seconds, token)) throw new Error("階段偵測已取消");
+        const signals = editorFrameSignals();
+        const phase = PHASE_ORDER[phaseIndex];
+        if (phase === "P1" && seconds <= 14 && signals.hudVisible
+          && (signals.timerVisible || signals.bossVisible)) {
+          directP1Candidate = true;
+        }
+
+        if (signals.structureAbsent) {
+          if (hiddenStartS === null) hiddenStartS = seconds;
+          lastHiddenS = seconds;
+          p4WhiteStartS = null;
+          p4WhiteCount = 0;
+        } else if (hiddenStartS !== null && lastHiddenS !== null) {
+          const hiddenDurationS = lastHiddenS - hiddenStartS;
+          const minimumHiddenS = editorUsesYoutube() ? 0 : (phase === "P4" ? 0 : (phase === "P1" ? 2 : 1));
+          if (hiddenDurationS >= minimumHiddenS && signals.hudVisible) {
+            const refined = await refineEditorPhaseAnchor(
+              phase,
+              Math.max(0, hiddenStartS - coarseStepS),
+              Math.min(duration, seconds + coarseStepS),
+              token,
+            );
+            if (refined !== null) {
+              acceptAnchor(phase, refined, "ui_structure_hidden_to_hud");
+              continue;
+            }
+          } else if (seconds - lastHiddenS > 4) {
+            hiddenStartS = null;
+            lastHiddenS = null;
+          }
+        }
+
+        if (phase === "P1" && seconds >= 16 && directP1Candidate && hiddenStartS === null) {
+          acceptAnchor("P1", 0, "video_starts_in_phase");
+          continue;
+        }
+
+        if (phase === "P4" && signals.hudVisible && signals.stageWhite) {
+          if (p4WhiteStartS === null) p4WhiteStartS = seconds;
+          p4WhiteCount += 1;
+          if (p4WhiteCount >= (editorUsesYoutube() ? 1 : 3)) {
+            const refined = await refineEditorPhaseAnchor(
+              phase,
+              Math.max(0, p4WhiteStartS - 6),
+              Math.min(duration, seconds + 1),
+              token,
+            );
+            if (refined !== null) {
+              acceptAnchor(phase, refined, "short_transition_to_white_hud");
+              continue;
+            }
+          }
+        } else if (phase === "P4") {
+          p4WhiteStartS = null;
+          p4WhiteCount = 0;
+        }
+
+        if (Math.round(seconds / coarseStepS) % (editorUsesYoutube() ? 8 : 20) === 0) {
+          updateEditorScanProgress(phase, seconds, duration);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+      }
+      return { anchors, methods };
+    }
+
+    function applyEditorPhaseAnchors(rawAnchors, rawMethods = {}, label = "畫面偵測") {
+      const anchors = {};
+      const methods = {};
+      for (const phase of PHASE_ORDER) {
+        const raw = rawAnchors?.[phase];
+        const value = typeof raw === "object"
+          ? Number(raw?.gate_start_s ?? raw?.estimated_hud_s)
+          : Number(raw);
+        if (!Number.isFinite(value) || value < 0) continue;
+        anchors[phase] = value;
+        methods[phase] = rawMethods?.[phase]
+          || (typeof raw === "object" ? String(raw?.template || label) : label);
+      }
+      editorState.hudTimes = anchors;
+      editorState.phaseMethods = methods;
+      const count = Object.keys(anchors).length;
+      els.editorPhaseStatus.textContent = `${label} ${count}/4`;
+      renderEditor();
+      return count;
+    }
+
+    async function autoDetectEditorPhases() {
+      if (!state.assets || !editorHasSource() || editorState.detecting) return;
+      if (editorState.sourceMode === "baseline" || editorUsesBaselineYoutube()) {
+        const count = applyEditorPhaseAnchors(
+          state.assets.baseline_replay?.phase_hints || {},
+          {},
+          editorUsesBaselineYoutube() ? "已套用基準 YouTube 校正" : "已由基準影片畫面偵測",
+        );
+        if (count === PHASE_ORDER.length) return;
+      }
+      if (editorUsesYoutube() && !editorState.youtubeReady) {
+        els.editorPhaseStatus.textContent = "YouTube 播放器尚未就緒";
+        return;
+      }
+
+      const scanUsesYoutube = editorUsesYoutube();
+      const token = editorState.detectionToken + 1;
+      editorState.detectionToken = token;
+      editorState.detecting = true;
+      editorState.hudTimes = {};
+      editorState.phaseMethods = {};
+      els.editorDetectPhasesBtn.disabled = true;
+      els.editorPhaseStatus.textContent = scanUsesYoutube ? "請分享目前分頁" : "正在掃描影片畫面";
+      const restoreTime = editorCurrentTime();
+      const restoreMuted = editorMuted();
+      const restoreRate = editorPlaybackRate();
+      const resume = !editorPaused();
+      editorPause();
+      editorSetMuted(true);
+      renderEditor();
+      try {
+        if (scanUsesYoutube) {
+          await beginEditorYoutubeCapture(token);
+          await waitForEditorYoutubeDuration(token);
+          await primeEditorYoutubeForScan(token);
+        }
+        const result = await scanEditorPhaseAnchors(token);
+        if (token !== editorState.detectionToken) return;
+        const count = applyEditorPhaseAnchors(
+          result.anchors,
+          result.methods,
+          scanUsesYoutube ? "YouTube 自動校正完成" : "畫面偵測完成",
+        );
+        if (count !== PHASE_ORDER.length) {
+          els.editorPhaseStatus.textContent = `畫面偵測 ${count}/4，可手動修正 HUD 時間`;
+        }
+      } catch (error) {
+        if (token === editorState.detectionToken) {
+          els.editorPhaseStatus.textContent = `偵測失敗：${error.message}`;
+        }
+      } finally {
+        if (token === editorState.detectionToken) {
+          editorPause();
+          editorSetPlaybackRate(restoreRate);
+          if (scanUsesYoutube) {
+            seekEditorVideo(restoreTime);
+            await delay(250);
+          } else {
+            await seekEditorDetectionFrame(restoreTime, token);
+          }
+          editorSetMuted(restoreMuted);
+        }
+        if (scanUsesYoutube) endEditorYoutubeCapture();
+        if (token === editorState.detectionToken) {
+          editorState.detecting = false;
+          els.editorDetectPhasesBtn.disabled = false;
+          resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+          if (resume) editorPlay().catch(() => {});
+        }
+      }
+    }
+
+    function handleEditorVideoLoaded() {
+      resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+      autoDetectEditorPhases().catch((error) => {
+        els.editorPhaseStatus.textContent = `偵測失敗：${error.message}`;
+      });
+    }
+
+    function seekEditorVideo(targetS) {
+      if (!Number.isFinite(targetS)) return;
+      editorState.voiceArmedKey = "";
+      editorState.voiceArmedAtS = Number.NaN;
+      const duration = editorDuration();
+      const max = duration > 0 ? Math.max(0, duration - 0.01) : Math.max(0, targetS);
+      const target = Math.max(0, Math.min(targetS, max));
+      if (editorUsesYoutube()) {
+        if (!editorState.youtubeReady) return;
+        if (!editorState.detecting) handleEditorVoiceSeeking();
+        try { editorState.youtubePlayer.seekTo(target, true); } catch (_) { return; }
+        if (!editorState.detecting) {
+          window.setTimeout(() => {
+            if (!editorUsesYoutube() || editorState.detecting) return;
+            editorState.voiceSeeking = false;
+            resetEditorVoicePlayback();
+          }, 350);
+        }
+        return;
+      }
+      els.editorVideo.currentTime = target;
+    }
+
+    function editorSeekBy(deltaS) {
+      seekEditorVideo(editorCurrentTime() + Number(deltaS || 0));
+    }
+
+    function editorHudTime() {
+      return Number(editorState.hudTimes[editorState.phase] || 0);
+    }
+
+    function setEditorStatus(text, kind = "") {
+      els.editorStatus.textContent = text;
+      els.editorStatus.className = `editorStatus ${kind}`.trim();
+    }
+
+    function updateEditorSaveStatus() {
+      const count = editorState.dirtyKeys.size;
+      els.editorSaveBtn.disabled = count === 0;
+      setEditorStatus(count ? `${count} 則尚未儲存` : "沒有未儲存變更", count ? "dirty" : "");
+      updateFeedbackButton();
+    }
+
+    function markEditorDirty(cue) {
+      const key = editorCueKey(cue);
+      const original = editorState.originalByKey.get(key);
+      const changed = !original
+        || String(cue.text || "") !== original.text
+        || Math.abs(Number(cue.start_s || 0) - original.start_s) > 0.0005
+        || Math.abs(Number(cue.lead_s || 0) - original.lead_s) > 0.0005
+        || Boolean(cue.enabled) !== original.enabled
+        || Boolean(cue.deleted) !== original.deleted;
+      if (changed) editorState.dirtyKeys.add(key);
+      else editorState.dirtyKeys.delete(key);
+      cue.scheduled_s = editorScheduledS(cue);
+      editorState.voicePlayedKeys.delete(editorCueKey(cue));
+      updateEditorSaveStatus();
+    }
+
+    function renderEditorSelected() {
+      const cue = editorCueByKey(editorState.selectedKey);
+      const controls = [els.editorTextInput, els.editorStartInput, els.editorLeadInput, els.editorPromptInput, els.editorEnabledInput, els.editorSetCueBtn, els.editorJumpCueBtn, els.editorPreviewCueBtn, els.editorDeleteCueBtn];
+      const nudgeButtons = [...document.querySelectorAll("[data-editor-nudge]")];
+      if (!cue) {
+        els.editorSelectedName.textContent = "尚未選取招式";
+        for (const control of [...controls, ...nudgeButtons]) control.disabled = true;
+        els.editorStartInput.value = "";
+        els.editorLeadInput.value = "";
+        els.editorPromptInput.value = "";
+        els.editorTextInput.value = "";
+        return;
+      }
+      els.editorSelectedName.textContent = `${cue.phase}#${cue.cue_index} ${cue.text}`;
+      els.editorTextInput.value = String(cue.text || "");
+      els.editorStartInput.value = Number(cue.start_s || 0).toFixed(3);
+      els.editorLeadInput.value = Number(cue.lead_s || 0).toFixed(3);
+      els.editorPromptInput.value = editorScheduledS(cue).toFixed(3);
+      els.editorEnabledInput.checked = Boolean(cue.enabled);
+      for (const control of [...controls, ...nudgeButtons]) control.disabled = false;
+    }
+
+    function saveCustomSkillLibrary() {
+      localStorage.setItem(CUSTOM_SKILLS_KEY, JSON.stringify([...editorState.customSkillTexts]));
+    }
+
+    function renderEditorSkillLibrary() {
+      const baseTexts = new Set(state.baseTimeline.map((cue) => String(cue.text || "").trim()).filter(Boolean));
+      const entries = [...new Set([...baseTexts, ...editorState.customSkillTexts])]
+        .sort((a, b) => a.localeCompare(b, "zh-TW"));
+      els.editorSkillLibrary.innerHTML = entries.map((text) => {
+        const encoded = encodeURIComponent(text);
+        const custom = editorState.customSkillTexts.has(text) && !baseTexts.has(text);
+        return `<span class="skillChip ${custom ? "customSkill" : ""}">
+          <button class="skillUse" data-editor-skill="${encoded}" title="${escapeHtml(text)}">${escapeHtml(text)}</button>
+          ${custom ? `<button class="skillRemove" data-editor-skill-remove="${encoded}" title="從快速新增移除" aria-label="移除 ${escapeHtml(text)}">×</button>` : ""}
+        </span>`;
+      }).join("");
+    }
+
+    function renderEditorTable() {
+      const query = String(els.editorFilter.value || "").trim().toLocaleLowerCase("zh-TW");
+      const rows = editorPhaseCues().filter((cue) => !query || String(cue.text || "").toLocaleLowerCase("zh-TW").includes(query));
+      els.editorTable.innerHTML = rows.map((cue) => {
+        const key = editorCueKey(cue);
+        const selected = key === editorState.selectedKey ? "selected" : "";
+        const playing = key === editorState.playbackCueKey ? "playing" : "";
+        const dirty = editorState.dirtyKeys.has(key) ? "dirty" : "";
+        const enabled = cue.enabled ? "" : "disabledCue";
+        return `<button class="editorCueRow ${selected} ${playing} ${dirty}" data-editor-key="${escapeHtml(key)}" aria-current="${playing ? "true" : "false"}">
+          <span>${cue.phase}#${cue.cue_index}</span>
+          <span>${fmt(Number(cue.start_s || 0))}</span>
+          <span class="promptCol">${fmt(editorScheduledS(cue))}</span>
+          <span>${escapeHtml(cue.text || "")}</span>
+          <span class="${enabled}">${cue.enabled ? "開" : "關"}</span>
+        </button>`;
+      }).join("");
+    }
+
+    function renderEditorRail() {
+      const cues = editorPhaseCues();
+      const duration = Math.max(90, ...cues.map((cue) => editorScheduledS(cue) + 12));
+      editorState.railWidth = Math.max(900, Math.ceil(duration * 10));
+      const ticks = [];
+      for (let second = 0; second <= duration; second += 10) {
+        ticks.push(`<span class="railTick" style="left:${second * 10}px">${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")}</span>`);
+      }
+      const markers = cues.map((cue) => {
+        const key = editorCueKey(cue);
+        const selected = key === editorState.selectedKey ? "selected" : "";
+        const playing = key === editorState.playbackCueKey ? "playing" : "";
+        const scheduledS = editorScheduledS(cue);
+        return `<button class="railCue ${selected} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * 10}px" title="${escapeHtml(`提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}"></button>`;
+      });
+      els.editorRail.style.width = `${editorState.railWidth}px`;
+      els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead"></span>`;
+    }
+
+    function renderEditor() {
+      for (const button of document.querySelectorAll("[data-editor-phase]")) {
+        const phase = button.dataset.editorPhase;
+        const anchor = editorState.hudTimes[phase];
+        button.classList.toggle("active", phase === editorState.phase);
+        button.textContent = Number.isFinite(anchor) ? `${phase} ${fmt(anchor)}` : `${phase} --:--`;
+        button.title = Number.isFinite(anchor)
+          ? `${phase} HUD ${fmt(anchor)} · ${editorState.phaseMethods[phase] || "手動"}`
+          : `${phase} 尚未偵測`;
+      }
+      const selectedHud = editorState.hudTimes[editorState.phase];
+      els.editorHudInput.value = Number.isFinite(selectedHud) ? selectedHud.toFixed(3) : "";
+      renderEditorSelected();
+      renderEditorRail();
+      renderEditorTable();
+      renderEditorSkillLibrary();
+      updateEditorSaveStatus();
+    }
+
+    function scrollEditorCueIntoView(key, includeTable = true) {
+      requestAnimationFrame(() => {
+        const selector = `[data-editor-key="${CSS.escape(key)}"]`;
+        const marker = els.editorRail.querySelector(selector);
+        marker?.scrollIntoView({ block: "nearest", inline: "center" });
+        if (includeTable) {
+          const row = els.editorTable.querySelector(selector);
+          row?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+      });
+    }
+
+    function playEditorCueFromPrompt(cue) {
+      const targetS = editorAbsolutePromptS(cue);
+      if (!Number.isFinite(targetS)) {
+        setEditorStatus(`${cue.phase} 尚未校正 HUD 時間`, "dirty");
+        return;
+      }
+      const key = editorCueKey(cue);
+      primeAudioFromGesture();
+      editorPause();
+      seekEditorVideo(targetS);
+      editorState.voiceArmedKey = key;
+      editorState.voiceArmedAtS = targetS;
+      editorState.voicePlayedKeys.delete(key);
+      editorState.playbackCueKey = key;
+      editorState.playbackPhase = cue.phase;
+      editorPlay().catch((error) => setEditorStatus(`無法播放：${error.message}`, "dirty"));
+    }
+
+    function selectEditorCue(key, seek = true) {
+      const cue = editorCueByKey(key);
+      if (!cue) return;
+      editorState.phase = cue.phase;
+      editorState.selectedKey = key;
+      if (seek) {
+        editorState.playbackCueKey = key;
+        editorState.playbackPhase = cue.phase;
+      }
+      renderEditor();
+      if (seek) playEditorCueFromPrompt(cue);
+      scrollEditorCueIntoView(key);
+    }
+
+    function selectEditorPhase(phase) {
+      if (!PHASE_ORDER.includes(phase)) return;
+      const anchorS = Number(editorState.hudTimes[phase]);
+      editorPause();
+      editorState.phase = phase;
+      const current = editorCueByKey(editorState.selectedKey);
+      if (!current || current.phase !== phase) {
+        const first = editorPhaseCues()[0];
+        editorState.selectedKey = first ? editorCueKey(first) : "";
+      }
+      editorState.playbackCueKey = "";
+      editorState.playbackPhase = phase;
+      resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+      if (Number.isFinite(anchorS)) {
+        seekEditorVideo(anchorS);
+        els.editorPhaseStatus.textContent = `${phase} 已跳到 HUD ${fmt(anchorS)}`;
+      } else {
+        els.editorPhaseStatus.textContent = `${phase} 尚未校正 HUD 時間`;
+      }
+      renderEditor();
+      if (editorState.selectedKey) scrollEditorCueIntoView(editorState.selectedKey);
+    }
+
+    function updateSelectedEditorCue({ text, startS, leadS, enabled } = {}) {
+      const cue = editorCueByKey(editorState.selectedKey);
+      if (!cue) return;
+      const oldStart = Number(cue.start_s || 0);
+      if (typeof text === "string") {
+        const value = text.slice(0, 60);
+        if (value.trim()) {
+          cue.text = value;
+          applyCueVoice(cue);
+        }
+      }
+      if (Number.isFinite(startS)) {
+        const duration = Math.max(0, Number(cue.end_s || oldStart) - oldStart);
+        cue.start_s = Math.max(0, startS);
+        cue.end_s = Number(cue.start_s) + duration;
+      }
+      if (Number.isFinite(leadS)) cue.lead_s = leadS;
+      if (typeof enabled === "boolean") cue.enabled = enabled;
+      markEditorDirty(cue);
+      renderEditorSelected();
+      renderEditorRail();
+      renderEditorTable();
+      renderEditorSkillLibrary();
+    }
+
+    function nextCustomCueIndex(phase) {
+      return Math.max(1000, ...editorState.cues
+        .filter((cue) => cue.phase === phase && cue.custom)
+        .map((cue) => Number(cue.cue_index || 0))) + 1;
+    }
+
+    function addEditorCue(text) {
+      const normalized = String(text || "").trim();
+      if (!normalized) {
+        setEditorStatus("請輸入招式名稱", "dirty");
+        return;
+      }
+      const hudS = Number(editorState.hudTimes[editorState.phase]);
+      if (!Number.isFinite(hudS)) {
+        setEditorStatus(`請先設定 ${editorState.phase} HUD 時間`, "dirty");
+        return;
+      }
+      const startS = editorCurrentTime() - hudS;
+      if (startS < 0) {
+        setEditorStatus("影片時間早於本階段 HUD", "dirty");
+        return;
+      }
+      const cue = {
+        phase: editorState.phase,
+        cue_index: nextCustomCueIndex(editorState.phase),
+        text: normalized,
+        start_s: startS,
+        end_s: startS,
+        lead_s: 2,
+        offset_s: 0,
+        scheduled_s: Math.max(0, startS - 2),
+        enabled: true,
+        deleted: false,
+        custom: true,
+        clip_url: "",
+        clip_path: "",
+        duration_s: Math.max(0.8, normalized.length * 0.22),
+      };
+      applyCueVoice(cue);
+      editorState.cues.push(cue);
+      editorState.customSkillTexts.add(normalized);
+      saveCustomSkillLibrary();
+      editorState.selectedKey = editorCueKey(cue);
+      markEditorDirty(cue);
+      els.editorNewSkillInput.value = "";
+      renderEditor();
+    }
+
+    function deleteSelectedEditorCue() {
+      const cue = editorCueByKey(editorState.selectedKey);
+      if (!cue) return;
+      cue.deleted = true;
+      cue.enabled = false;
+      markEditorDirty(cue);
+      const next = editorPhaseCues()[0];
+      editorState.selectedKey = next ? editorCueKey(next) : "";
+      resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+      renderEditor();
+    }
+
+    function setSelectedCueFromVideo() {
+      const relative = editorCurrentTime() - editorHudTime();
+      if (relative < 0) {
+        setEditorStatus("影片時間早於本階段 HUD", "dirty");
+        return;
+      }
+      updateSelectedEditorCue({ startS: relative });
+    }
+
+    function nudgeSelectedEditorCue(deltaS) {
+      const cue = editorCueByKey(editorState.selectedKey);
+      if (!cue) return;
+      updateSelectedEditorCue({ startS: Number(cue.start_s || 0) + Number(deltaS || 0) });
+      seekEditorVideo(editorHudTime() + Number(cue.start_s || 0));
+    }
+
+    function jumpToSelectedEditorCue() {
+      const cue = editorCueByKey(editorState.selectedKey);
+      if (!cue) return;
+      playEditorCueFromPrompt(cue);
+    }
+
+    async function previewSelectedEditorCue() {
+      const cue = editorCueByKey(editorState.selectedKey);
+      if (!cue) return;
+      stopAllAudio();
+      const played = await playCueAudio(cue, { ignoreMuted: true });
+      if (played) log(`試聽 ${cue.phase}#${cue.cue_index} ${cue.text}`, "ok");
+    }
+
+    function resetEditorVoicePlayback({ stopAudio = false, includeCurrent = false, clearPlayed = false } = {}) {
+      editorState.voiceGeneration += 1;
+      editorState.voiceLastVideoS = editorCurrentTime() - (includeCurrent ? 0.06 : 0);
+      if (clearPlayed) editorState.voicePlayedKeys.clear();
+      if (stopAudio) stopAllAudio();
+    }
+
+    function handleEditorVoicePlay() {
+      editorState.voiceSeeking = false;
+      resetEditorVoicePlayback({ includeCurrent: true });
+      if (editorState.voiceEnabled) startAudioLoading();
+    }
+
+    function handleEditorVoicePause() {
+      resetEditorVoicePlayback({ stopAudio: true });
+    }
+
+    function handleEditorVoiceSeeking() {
+      editorState.voiceSeeking = true;
+      resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+    }
+
+    function handleEditorVoiceSeeked() {
+      editorState.voiceSeeking = false;
+      resetEditorVoicePlayback();
+    }
+
+    function handleEditorVoiceEnded() {
+      resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+    }
+
+    function editorAbsolutePromptS(cue) {
+      const hudS = Number(editorState.hudTimes[cue.phase]);
+      return Number.isFinite(hudS) ? hudS + editorScheduledS(cue) : Number.NaN;
+    }
+
+    async function playEditorVoiceCue(cue, absoluteS, videoS, generation) {
+      const played = await playCueAudio(cue, {
+        ignoreMuted: true,
+        shouldStart: () => generation === editorState.voiceGeneration
+          && editorState.voiceEnabled
+          && !editorState.voiceSeeking
+          && !editorPaused()
+          && document.body.classList.contains("editor-mode"),
+      });
+      if (played) {
+        log(`編輯預覽 ${cue.phase}#${cue.cue_index} ${cue.text} late=${(videoS - absoluteS).toFixed(3)}s`, "ok");
+      }
+    }
+
+    function updateEditorVoicePlayback() {
+      const currentS = editorCurrentTime();
+      if (!document.body.classList.contains("editor-mode")
+          || !editorState.voiceEnabled
+          || editorState.voiceSeeking
+          || editorState.detecting
+          || editorPaused()) {
+        editorState.voiceLastVideoS = currentS;
+        return;
+      }
+      const previousS = Number(editorState.voiceLastVideoS);
+      editorState.voiceLastVideoS = currentS;
+      const armedKey = editorState.voiceArmedKey;
+      const armedAtS = Number(editorState.voiceArmedAtS);
+      if (armedKey && Number.isFinite(armedAtS) && currentS >= armedAtS - 0.08 && currentS - armedAtS <= 1.25) {
+        const armedCue = editorCueByKey(armedKey);
+        editorState.voiceArmedKey = "";
+        editorState.voiceArmedAtS = Number.NaN;
+        if (armedCue) {
+          editorState.voicePlayedKeys.add(armedKey);
+          playEditorVoiceCue(armedCue, armedAtS, currentS, editorState.voiceGeneration);
+        }
+      } else if (armedKey && Number.isFinite(armedAtS) && currentS - armedAtS > 1.25) {
+        editorState.voiceArmedKey = "";
+        editorState.voiceArmedAtS = Number.NaN;
+      }
+      if (!Number.isFinite(previousS)) return;
+      const advancedS = currentS - previousS;
+      if (advancedS <= 0 || advancedS > 1.25) return;
+
+      const generation = editorState.voiceGeneration;
+      const due = editorState.cues
+        .filter((cue) => cue.enabled && !cue.deleted && !editorState.voicePlayedKeys.has(editorCueKey(cue)))
+        .map((cue) => ({ cue, absoluteS: editorAbsolutePromptS(cue) }))
+        .filter(({ absoluteS }) => Number.isFinite(absoluteS)
+          && absoluteS >= previousS - 0.001
+          && absoluteS <= currentS + 0.025
+          && currentS - absoluteS <= 0.6)
+        .sort((a, b) => a.absoluteS - b.absoluteS || Number(a.cue.cue_index || 0) - Number(b.cue.cue_index || 0));
+      for (const item of due) {
+        const key = editorCueKey(item.cue);
+        editorState.voicePlayedKeys.add(key);
+        if (editorState.voiceArmedKey === key) {
+          editorState.voiceArmedKey = "";
+          editorState.voiceArmedAtS = Number.NaN;
+        }
+        playEditorVoiceCue(item.cue, item.absoluteS, currentS, generation);
+      }
+    }
+
+    function editorPlaybackPosition(currentS) {
+      const phases = PHASE_ORDER
+        .map((phase) => ({ phase, hudS: Number(editorState.hudTimes[phase]) }))
+        .filter((item) => Number.isFinite(item.hudS))
+        .sort((a, b) => a.hudS - b.hudS);
+      let currentPhase = "";
+      for (const item of phases) {
+        if (item.hudS <= currentS + 0.04) currentPhase = item.phase;
+        else break;
+      }
+      if (!currentPhase) return { phase: "", key: "" };
+
+      let currentKey = "";
+      const cues = editorState.cues
+        .filter((cue) => cue.phase === currentPhase && cue.enabled && !cue.deleted)
+        .map((cue) => ({ cue, absoluteS: editorAbsolutePromptS(cue) }))
+        .filter((item) => Number.isFinite(item.absoluteS))
+        .sort((a, b) => a.absoluteS - b.absoluteS || Number(a.cue.cue_index || 0) - Number(b.cue.cue_index || 0));
+      for (const item of cues) {
+        if (item.absoluteS <= currentS + 0.04) currentKey = editorCueKey(item.cue);
+        else break;
+      }
+      return { phase: currentPhase, key: currentKey };
+    }
+
+    function updateEditorPlaybackHighlight(currentS) {
+      if (!document.body.classList.contains("editor-mode") || editorState.detecting) return;
+      const position = editorPlaybackPosition(currentS);
+      const followPhase = !editorPaused() && position.phase && position.phase !== editorState.phase;
+      const changed = position.key !== editorState.playbackCueKey
+        || position.phase !== editorState.playbackPhase;
+      if (!changed && !followPhase) return;
+
+      editorState.playbackCueKey = position.key;
+      editorState.playbackPhase = position.phase;
+      if (followPhase) {
+        editorState.phase = position.phase;
+        if (position.key) editorState.selectedKey = position.key;
+        else {
+          const first = editorPhaseCues()[0];
+          editorState.selectedKey = first ? editorCueKey(first) : "";
+        }
+        renderEditor();
+      } else {
+        for (const element of [...els.editorTable.querySelectorAll("[data-editor-key]"), ...els.editorRail.querySelectorAll("[data-editor-key]")]) {
+          const playing = Boolean(position.key) && element.dataset.editorKey === position.key;
+          element.classList.toggle("playing", playing);
+          if (element.classList.contains("editorCueRow")) element.setAttribute("aria-current", String(playing));
+        }
+      }
+      if (position.key && position.phase === editorState.phase && !editorPaused()) {
+        scrollEditorCueIntoView(position.key);
+      }
+    }
+
+    function updateEditorPlayback() {
+      const currentS = editorCurrentTime();
+      els.editorVideoTime.textContent = fmt(currentS);
+      els.editorPlayBtn.textContent = editorPaused() ? "播放" : "暫停";
+      updateEditorVoicePlayback();
+      updateEditorPlaybackHighlight(currentS);
+      const playhead = document.getElementById("editorRailPlayhead");
+      if (!playhead) return;
+      const relative = currentS - editorHudTime();
+      playhead.style.left = `${Math.max(0, Math.min(editorState.railWidth, relative * 10))}px`;
+      playhead.style.display = relative >= 0 ? "block" : "none";
+    }
+
+    async function refreshTimelineFromServer(preserveAlignment = true) {
+      let data;
+      if (STATIC_DEPLOYMENT) {
+        data = state.assets;
+      } else {
+        const response = await fetch("/web-live-assets.json", { cache: "no-store" });
+        data = await response.json();
+        if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText);
+      }
+      state.assets = data;
+      for (const phase of PHASE_ORDER) {
+        state.timelineByPhase[phase] = data.timeline
+          .filter((cue) => cue.enabled && !cue.deleted && cue.phase === phase)
+          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      }
+      initializeEditorData(data, preserveAlignment);
+      els.topStatus.textContent = `模板 ${data.template_count}，語音 ${data.timeline_enabled_count} 句`;
+    }
+
+    async function saveEditorChanges() {
+      if (!editorState.dirtyKeys.size) return;
+      for (const cue of editorState.cues) cue.text = String(cue.text || "").trim();
+      const changes = [...editorState.dirtyKeys].map((key) => {
+        const cue = editorCueByKey(key);
+        return {
+          phase: cue.phase,
+          cue_index: cue.cue_index,
+          text: cue.text,
+          start_s: Number(cue.start_s || 0),
+          lead_s: Number(cue.lead_s || 0),
+          enabled: Boolean(cue.enabled),
+          deleted: Boolean(cue.deleted),
+          custom: Boolean(cue.custom),
+        };
+      });
+      els.editorSaveBtn.disabled = true;
+      setEditorStatus("儲存中", "dirty");
+      try {
+        if (STATIC_DEPLOYMENT) {
+          let stored = {};
+          try {
+            stored = JSON.parse(localStorage.getItem(STATIC_TIMELINE_KEY) || "{}") || {};
+          } catch (_) {}
+          for (const change of changes) {
+            if (!change.custom) stored[`${change.phase}:${change.cue_index}`] = change;
+          }
+          localStorage.setItem(STATIC_TIMELINE_KEY, JSON.stringify(stored));
+          const customCues = editorState.cues
+            .filter((cue) => cue.custom && !cue.deleted)
+            .map((cue) => ({ ...cue, scheduled_s: editorScheduledS(cue) }));
+          for (const cue of editorState.cues.filter((item) => !item.deleted)) {
+            if (cue.custom || !voiceCueForText(cue.text)) editorState.customSkillTexts.add(String(cue.text || "").trim());
+          }
+          saveCustomSkillLibrary();
+          localStorage.setItem(CUSTOM_CUES_KEY, JSON.stringify(customCues));
+          state.assets.timeline = editorState.cues
+            .filter((cue) => !cue.custom || !cue.deleted)
+            .map((cue) => ({ ...cue, scheduled_s: editorScheduledS(cue) }));
+          state.assets.timeline_enabled_count = state.assets.timeline.filter((cue) => cue.enabled && !cue.deleted).length;
+          await refreshTimelineFromServer(true);
+          setEditorStatus(`已儲存在此瀏覽器 ${changes.length} 則`, "saved");
+          log(`時間軸已儲存在此瀏覽器 ${changes.length} 則`, "ok");
+          return;
+        }
+        const response = await fetch("/api/save-web-timeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changes }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok === false) throw new Error(result.error || response.statusText);
+        await refreshTimelineFromServer(true);
+        setEditorStatus(`已儲存 ${result.changed} 則`, "saved");
+        log(`時間軸已儲存 ${result.changed} 則，備份 ${result.backup_dir}`, "ok");
+      } catch (error) {
+        setEditorStatus(`儲存失敗：${error.message}`, "dirty");
+        els.editorSaveBtn.disabled = false;
+      }
+    }
+
+    function collectFeedbackChanges() {
+      const baseByKey = new Map(state.baseTimeline.map((cue) => [editorCueKey(cue), cue]));
+      const currentByKey = new Map(editorState.cues.map((cue) => [editorCueKey(cue), cue]));
+      const changes = [];
+      for (const [key, base] of baseByKey) {
+        const cue = currentByKey.get(key) || base;
+        const startS = Number(cue.start_s ?? base.start_s ?? 0);
+        const leadS = Number(cue.lead_s ?? base.lead_s ?? 0);
+        const enabled = Boolean(cue.enabled) && !cue.deleted;
+        const text = String(cue.text ?? base.text ?? "");
+        const originalStartS = Number(base.start_s || 0);
+        const originalLeadS = Number(base.lead_s || 0);
+        const originalEnabled = Boolean(base.enabled);
+        const changed = Math.abs(startS - originalStartS) > 0.0005
+          || Math.abs(leadS - originalLeadS) > 0.0005
+          || enabled !== originalEnabled
+          || text !== String(base.text || "")
+          || Boolean(cue.deleted);
+        if (!changed) continue;
+        changes.push({
+          operation: cue.deleted ? "delete" : "update",
+          phase: base.phase,
+          cue_index: Number(base.cue_index),
+          original_text: String(base.text || ""),
+          text,
+          original_start_s: originalStartS,
+          start_s: startS,
+          original_lead_s: originalLeadS,
+          lead_s: leadS,
+          original_enabled: originalEnabled,
+          enabled,
+        });
+      }
+      for (const cue of editorState.cues.filter((item) => item.custom && !item.deleted)) {
+        changes.push({
+          operation: "add",
+          phase: cue.phase,
+          cue_index: Number(cue.cue_index),
+          original_text: "",
+          text: String(cue.text || ""),
+          original_start_s: 0,
+          start_s: Number(cue.start_s || 0),
+          original_lead_s: 0,
+          lead_s: Number(cue.lead_s || 0),
+          original_enabled: false,
+          enabled: Boolean(cue.enabled),
+        });
+      }
+      return changes.sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase) || a.cue_index - b.cue_index);
+    }
+
+    function updateFeedbackButton() {
+      if (!els.editorSubmitBtn) return;
+      const count = collectFeedbackChanges().length;
+      els.editorSubmitBtn.disabled = count === 0 || editorState.feedbackSubmitting;
+      els.editorSubmitBtn.textContent = count ? `回傳建議 ${count}` : "回傳建議";
+    }
+
+    async function openFeedbackDialog() {
+      if (editorState.dirtyKeys.size) await saveEditorChanges();
+      const changes = collectFeedbackChanges();
+      if (!changes.length) {
+        setEditorStatus("目前沒有可回傳的調整", "dirty");
+        return;
+      }
+      els.feedbackReporter.value = localStorage.getItem(FEEDBACK_REPORTER_KEY) || "";
+      els.feedbackNote.value = "";
+      els.feedbackSummary.textContent = `${changes.length} 則招式調整`;
+      els.feedbackStatus.textContent = "";
+      els.feedbackDialog.showModal();
+    }
+
+    async function submitFeedback(event) {
+      event.preventDefault();
+      const changes = collectFeedbackChanges();
+      if (!changes.length || editorState.feedbackSubmitting) return;
+      editorState.feedbackSubmitting = true;
+      updateFeedbackButton();
+      els.feedbackSendBtn.disabled = true;
+      els.feedbackStatus.textContent = "正在回傳";
+      const reporterName = String(els.feedbackReporter.value || "").trim();
+      const phaseAnchors = Object.fromEntries(PHASE_ORDER
+        .filter((phase) => Number.isFinite(Number(editorState.hudTimes[phase])))
+        .map((phase) => [phase, Number(editorState.hudTimes[phase])]));
+      try {
+        const response = await fetch(FEEDBACK_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reporter_name: reporterName,
+            note: String(els.feedbackNote.value || "").trim(),
+            video_name: editorState.sourceName,
+            video_duration_s: editorDuration(),
+            phase_anchors: phaseAnchors,
+            changes,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok === false) throw new Error(result.error || response.statusText);
+        localStorage.setItem(FEEDBACK_REPORTER_KEY, reporterName);
+        els.feedbackDialog.close();
+        setEditorStatus(`已回傳建議 #${result.id}，共 ${result.changed} 則`, "saved");
+        log(`時間軸建議已回傳 #${result.id}`, "ok");
+      } catch (error) {
+        els.feedbackStatus.textContent = `回傳失敗：${error.message}`;
+      } finally {
+        editorState.feedbackSubmitting = false;
+        els.feedbackSendBtn.disabled = false;
+        updateFeedbackButton();
+      }
+    }
+
+    function applySettings() {
+      const wasMuted = state.audioMuted;
+      state.extraLeadS = Number(els.leadInput.value || 0);
+      state.threshold = Number(els.thresholdInput.value || 0.84);
+      state.volume = Number(els.volumeInput.value || 100) / 100;
+      state.audioMuted = Boolean(els.muteInput.checked);
+      if (state.audioMuted && !wasMuted) stopAllAudio();
+      if (state.audioGain) state.audioGain.gain.value = state.audioMuted ? 0 : state.volume;
+      els.volumeText.textContent = `${Math.round(state.volume * 100)}%`;
+      localStorage.setItem("blackMageWeb2ExtraLeadS", state.extraLeadS.toFixed(1));
+      localStorage.setItem("blackMageWeb2Threshold", state.threshold.toFixed(2));
+      localStorage.setItem("blackMageWeb2Volume", state.volume.toFixed(2));
+      localStorage.setItem("blackMageWeb2Muted", String(state.audioMuted));
+      for (const phase of PHASE_ORDER) {
+        state.timelineByPhase[phase] = [...(state.timelineByPhase[phase] || [])]
+          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      }
+      if (state.activePhase) {
+        state.activeCues = [...(state.timelineByPhase[state.activePhase] || [])]
+          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      }
+      renderTimeline();
+      updateAudioStatus();
+    }
+
+    function bindEvents() {
+      document.addEventListener("pointerdown", primeAudioFromGesture, { capture: true });
+      document.addEventListener("keydown", primeAudioFromGesture, { capture: true });
+      els.liveModeBtn.addEventListener("click", () => setAppMode("live"));
+      els.editorModeBtn.addEventListener("click", () => setAppMode("editor"));
+      els.prompterFocusBtn.addEventListener("click", togglePrompterFocus);
+      els.shareBtn.addEventListener("click", startShare);
+      els.baselineBtn.addEventListener("click", startBaseline);
+      els.selfTestBtn.addEventListener("click", runSelfTest);
+      els.testVoiceBtn.addEventListener("click", () => testVoice().catch((error) => log(`測試語音失敗：${error.message}`, "badText")));
+      els.resetBtn.addEventListener("click", resetRun);
+      els.stopBtn.addEventListener("click", stopSource);
+      els.leadInput.addEventListener("change", applySettings);
+      els.thresholdInput.addEventListener("change", applySettings);
+      els.volumeInput.addEventListener("input", applySettings);
+      els.muteInput.addEventListener("change", applySettings);
+      els.editorBaselineBtn.addEventListener("click", loadEditorBaseline);
+      els.editorYoutubeBtn.addEventListener("click", () => loadEditorYoutube(els.editorYoutubeInput.value));
+      els.editorYoutubeInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        loadEditorYoutube(els.editorYoutubeInput.value);
+      });
+      els.editorDetectPhasesBtn.addEventListener("click", () => autoDetectEditorPhases());
+      els.editorVideo.addEventListener("loadeddata", handleEditorVideoLoaded);
+      els.editorVideo.addEventListener("play", handleEditorVoicePlay);
+      els.editorVideo.addEventListener("pause", handleEditorVoicePause);
+      els.editorVideo.addEventListener("seeking", handleEditorVoiceSeeking);
+      els.editorVideo.addEventListener("seeked", handleEditorVoiceSeeked);
+      els.editorVideo.addEventListener("ended", handleEditorVoiceEnded);
+      els.editorPlayBtn.addEventListener("click", () => {
+        if (editorPaused()) editorPlay().catch((error) => setEditorStatus(error.message, "dirty"));
+        else editorPause();
+      });
+      els.editorVoiceInput.addEventListener("change", () => {
+        editorState.voiceEnabled = els.editorVoiceInput.checked;
+        localStorage.setItem("blackMageEditorVoiceEnabled", String(editorState.voiceEnabled));
+        resetEditorVoicePlayback({ stopAudio: !editorState.voiceEnabled, includeCurrent: editorState.voiceEnabled });
+        if (editorState.voiceEnabled && !editorPaused()) startAudioLoading();
+      });
+      for (const button of document.querySelectorAll("[data-editor-seek]")) {
+        button.addEventListener("click", () => editorSeekBy(Number(button.dataset.editorSeek || 0)));
+      }
+      for (const button of document.querySelectorAll("[data-editor-phase]")) {
+        button.addEventListener("click", () => selectEditorPhase(button.dataset.editorPhase));
+      }
+      els.editorSetHudBtn.addEventListener("click", () => {
+        editorState.hudTimes[editorState.phase] = editorCurrentTime();
+        editorState.phaseMethods[editorState.phase] = "manual";
+        els.editorPhaseStatus.textContent = `${editorState.phase} 已手動修正`;
+        resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+        renderEditor();
+      });
+      els.editorJumpHudBtn.addEventListener("click", () => seekEditorVideo(editorHudTime()));
+      els.editorHudInput.addEventListener("change", () => {
+        const value = Number(els.editorHudInput.value || 0);
+        if (Number.isFinite(value) && value >= 0) {
+          editorState.hudTimes[editorState.phase] = value;
+          editorState.phaseMethods[editorState.phase] = "manual";
+          els.editorPhaseStatus.textContent = `${editorState.phase} 已手動修正`;
+          resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+        }
+        renderEditor();
+      });
+      els.editorTable.addEventListener("click", (event) => {
+        const row = event.target.closest("[data-editor-key]");
+        if (row) selectEditorCue(row.dataset.editorKey);
+      });
+      els.editorRail.addEventListener("click", (event) => {
+        const marker = event.target.closest("[data-editor-key]");
+        if (marker) selectEditorCue(marker.dataset.editorKey);
+      });
+      els.editorFilter.addEventListener("input", renderEditorTable);
+      els.editorTextInput.addEventListener("input", () => updateSelectedEditorCue({ text: els.editorTextInput.value }));
+      els.editorStartInput.addEventListener("change", () => updateSelectedEditorCue({ startS: Number(els.editorStartInput.value) }));
+      els.editorLeadInput.addEventListener("change", () => updateSelectedEditorCue({ leadS: Number(els.editorLeadInput.value) }));
+      els.editorEnabledInput.addEventListener("change", () => updateSelectedEditorCue({ enabled: els.editorEnabledInput.checked }));
+      els.editorSetCueBtn.addEventListener("click", setSelectedCueFromVideo);
+      els.editorJumpCueBtn.addEventListener("click", jumpToSelectedEditorCue);
+      els.editorPreviewCueBtn.addEventListener("click", () => previewSelectedEditorCue().catch((error) => setEditorStatus(`試聽失敗：${error.message}`, "dirty")));
+      els.editorDeleteCueBtn.addEventListener("click", deleteSelectedEditorCue);
+      els.editorAddSkillBtn.addEventListener("click", () => addEditorCue(els.editorNewSkillInput.value));
+      els.editorNewSkillInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        addEditorCue(els.editorNewSkillInput.value);
+      });
+      els.editorSkillLibrary.addEventListener("click", (event) => {
+        const remove = event.target.closest("[data-editor-skill-remove]");
+        if (remove) {
+          editorState.customSkillTexts.delete(decodeURIComponent(remove.dataset.editorSkillRemove));
+          saveCustomSkillLibrary();
+          renderEditorSkillLibrary();
+          return;
+        }
+        const use = event.target.closest("[data-editor-skill]");
+        if (use) addEditorCue(decodeURIComponent(use.dataset.editorSkill));
+      });
+      for (const button of document.querySelectorAll("[data-editor-nudge]")) {
+        button.addEventListener("click", () => nudgeSelectedEditorCue(Number(button.dataset.editorNudge || 0)));
+      }
+      els.editorSaveBtn.addEventListener("click", saveEditorChanges);
+      els.editorSubmitBtn.addEventListener("click", openFeedbackDialog);
+      els.feedbackForm.addEventListener("submit", submitFeedback);
+      els.feedbackCancelBtn.addEventListener("click", () => els.feedbackDialog.close());
+      els.editorReloadBtn.addEventListener("click", () => {
+        refreshTimelineFromServer(true).catch((error) => setEditorStatus(`重新載入失敗：${error.message}`, "dirty"));
+      });
+      for (const button of document.querySelectorAll("[data-manual-phase]")) {
+        button.addEventListener("click", () => manualStart(button.dataset.manualPhase));
+      }
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "F8") {
+          event.preventDefault();
+          if (state.running) stopSource();
+          else startShare();
+        } else if (event.key === "F11") {
+          event.preventDefault();
+          resetRun();
+        } else if (event.key === "F9" && !document.body.classList.contains("editor-mode")) {
+          event.preventDefault();
+          togglePrompterFocus();
+        }
+      });
+      window.addEventListener("beforeunload", (event) => {
+        if (!editorState.dirtyKeys.size) return;
+        event.preventDefault();
+        event.returnValue = "";
+      });
+    }
+
+    async function init() {
+      bindEvents();
+      try {
+        await loadAssets();
+      } catch (error) {
+        setText("status", "載入失敗", "badText");
+        els.topStatus.textContent = error.message;
+        log(`載入失敗：${error.message}`, "badText");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
