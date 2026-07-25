@@ -456,6 +456,8 @@
       z-index: 4;
     }
     .editorRailViewport.dragging { user-select: none; cursor: ew-resize; }
+    .editorRailViewport.seeking { user-select: none; cursor: ew-resize; }
+    .editorRailViewport.seeking .editorRail { cursor: ew-resize; }
     .railCue.playing {
       width: 15px;
       transform: translateX(-7px);
@@ -465,7 +467,38 @@
       z-index: 3;
     }
     .railCue.playing.selected { box-shadow: 0 0 0 2px #ffd166, 0 0 14px rgba(86, 233, 139, 0.85); }
-    .railPlayhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff5252; pointer-events: none; z-index: 2; }
+    .railPlayhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 14px;
+      transform: translateX(-7px);
+      cursor: ew-resize;
+      pointer-events: auto;
+      touch-action: none;
+      z-index: 5;
+    }
+    .railPlayhead::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 2px;
+      width: 10px;
+      height: 8px;
+      border-radius: 1px;
+      background: #ff5252;
+    }
+    .railPlayhead::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 6px;
+      width: 2px;
+      background: #ff5252;
+    }
+    .railPlayhead:hover::after,
+    .editorRailViewport.seeking .railPlayhead::after { left: 5px; width: 4px; }
     .editorFilter { width: 100%; margin-bottom: 8px; }
     .editorTableWrap { height: 430px; overflow: auto; border: 1px solid #303741; border-radius: 6px; background: #090b0e; }
     .editorCueRow {
@@ -806,6 +839,7 @@
       autoDetectAfterYoutubeReady: false,
       titleBeforeScan: "",
       railDrag: null,
+      railSeekDrag: null,
       suppressRailClick: false,
     };
 
@@ -3550,7 +3584,7 @@
         return `<button class="railCue ${selected} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px" title="${escapeHtml(`拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}" aria-label="拖曳調整 ${escapeHtml(cue.text || "")}"></button>`;
       });
       els.editorRail.style.width = `${editorState.railWidth}px`;
-      els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead"></span>`;
+      els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead" title="拖曳目前時間"></span>`;
     }
 
     function beginEditorRailDrag(event) {
@@ -3622,12 +3656,12 @@
       event.preventDefault();
     }
 
-    function seekEditorRailAt(clientX) {
+    function seekEditorRailAt(clientX, seekVideo = true) {
       const rect = els.editorRail.getBoundingClientRect();
       const railX = Math.max(0, Math.min(editorState.railWidth, clientX - rect.left));
       const phaseS = railX / EDITOR_RAIL_PX_PER_SECOND;
       const targetS = editorHudTime() + phaseS;
-      seekEditorVideo(targetS);
+      if (seekVideo) seekEditorVideo(targetS);
       const playhead = document.getElementById("editorRailPlayhead");
       if (playhead) {
         playhead.style.left = `${railX}px`;
@@ -3635,6 +3669,51 @@
       }
       els.editorVideoTime.textContent = fmt(targetS);
       updateEditorPlaybackHighlight(targetS);
+    }
+
+    function beginEditorRailSeek(event) {
+      const playhead = event.target.closest(".railPlayhead");
+      if (event.button !== 0 || !playhead) return;
+      editorState.railSeekDrag = {
+        playhead,
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        lastClientX: event.clientX,
+        lastSeekAt: 0,
+        moved: false,
+        resumeAfter: !editorPaused(),
+      };
+      playhead.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    }
+
+    function moveEditorRailSeek(event) {
+      const drag = editorState.railSeekDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      drag.lastClientX = event.clientX;
+      if (!drag.moved && Math.abs(event.clientX - drag.startClientX) < 3) return;
+      if (!drag.moved && drag.resumeAfter) editorPause();
+      drag.moved = true;
+      els.editorRailViewport.classList.add("seeking");
+      const now = performance.now();
+      const seekVideo = now - drag.lastSeekAt >= 100;
+      seekEditorRailAt(event.clientX, seekVideo);
+      if (seekVideo) drag.lastSeekAt = now;
+      event.preventDefault();
+    }
+
+    function endEditorRailSeek(event) {
+      const drag = editorState.railSeekDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      editorState.railSeekDrag = null;
+      drag.playhead.releasePointerCapture?.(event.pointerId);
+      els.editorRailViewport.classList.remove("seeking");
+      if (!drag.moved) return;
+      seekEditorRailAt(drag.lastClientX);
+      if (drag.resumeAfter) editorPlay().catch(() => {});
+      editorState.suppressRailClick = true;
+      window.setTimeout(() => { editorState.suppressRailClick = false; }, 0);
+      event.preventDefault();
     }
 
     function renderEditor() {
@@ -3994,6 +4073,10 @@
     }
 
     function updateEditorPlayback() {
+      if (editorState.railSeekDrag?.moved) {
+        els.editorPlayBtn.textContent = editorPaused() ? "播放" : "暫停";
+        return;
+      }
       const currentS = editorCurrentTime();
       els.editorVideoTime.textContent = fmt(currentS);
       els.editorPlayBtn.textContent = editorPaused() ? "播放" : "暫停";
@@ -4312,14 +4395,19 @@
         if (row) selectEditorCue(row.dataset.editorKey);
       });
       els.editorRail.addEventListener("pointerdown", beginEditorRailDrag);
+      els.editorRail.addEventListener("pointerdown", beginEditorRailSeek);
       window.addEventListener("pointermove", moveEditorRailDrag);
+      window.addEventListener("pointermove", moveEditorRailSeek);
       window.addEventListener("pointerup", endEditorRailDrag);
+      window.addEventListener("pointerup", endEditorRailSeek);
       window.addEventListener("pointercancel", endEditorRailDrag);
+      window.addEventListener("pointercancel", endEditorRailSeek);
       els.editorRail.addEventListener("click", (event) => {
         if (editorState.suppressRailClick) {
           event.preventDefault();
           return;
         }
+        if (event.target.closest(".railPlayhead")) return;
         const marker = event.target.closest("[data-editor-key]");
         if (marker) {
           selectEditorCue(marker.dataset.editorKey);
