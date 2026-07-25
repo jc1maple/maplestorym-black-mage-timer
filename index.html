@@ -989,16 +989,52 @@
       return applied;
     }
 
+    function nextAvailableCustomCueIndex(phase, cues) {
+      const used = new Set((cues || [])
+        .filter((cue) => cue.phase === phase)
+        .map((cue) => Number(cue.cue_index))
+        .filter((cueIndex) => Number.isInteger(cueIndex) && cueIndex >= 1001));
+      let candidate = 1001;
+      while (used.has(candidate)) candidate += 1;
+      return candidate;
+    }
+
+    function cuesHaveSameDefinition(left, right) {
+      return String(left?.text || "").trim() === String(right?.text || "").trim()
+        && Math.abs(Number(left?.start_s || 0) - Number(right?.start_s || 0)) <= 0.001
+        && Math.abs(Number(left?.lead_s || 0) - Number(right?.lead_s || 0)) <= 0.001
+        && Boolean(left?.enabled) === Boolean(right?.enabled);
+    }
+
     function appendStoredCustomCues(data) {
       if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
-      const existing = new Set(data.timeline.map((cue) => `${cue.phase}:${cue.cue_index}`));
-      for (const raw of readStoredCustomCues()) {
+      const existing = new Map(data.timeline.map((cue) => [`${cue.phase}:${cue.cue_index}`, cue]));
+      const storedCues = readStoredCustomCues();
+      const repairedCues = [];
+      let reassigned = 0;
+      let absorbed = 0;
+      let changed = false;
+      for (const raw of storedCues) {
         const phase = String(raw.phase || "");
-        const cueIndex = Number(raw.cue_index);
+        let cueIndex = Number(raw.cue_index);
         const text = String(raw.text || "").trim();
-        if (!PHASE_ORDER.includes(phase) || !Number.isInteger(cueIndex) || cueIndex < 1001 || !text) continue;
-        const key = `${phase}:${cueIndex}`;
-        if (existing.has(key)) continue;
+        if (!PHASE_ORDER.includes(phase) || !Number.isInteger(cueIndex) || cueIndex < 1001 || !text) {
+          changed = true;
+          continue;
+        }
+        let key = `${phase}:${cueIndex}`;
+        const occupiedCue = existing.get(key);
+        if (occupiedCue && cuesHaveSameDefinition(raw, occupiedCue)) {
+          absorbed += 1;
+          changed = true;
+          continue;
+        }
+        if (occupiedCue) {
+          cueIndex = nextAvailableCustomCueIndex(phase, data.timeline);
+          key = `${phase}:${cueIndex}`;
+          reassigned += 1;
+          changed = true;
+        }
         const cue = {
           ...raw,
           phase,
@@ -1015,7 +1051,17 @@
         cue.scheduled_s = Math.max(0, cue.start_s + cue.offset_s - cue.lead_s);
         applyCueVoice(cue);
         data.timeline.push(cue);
-        existing.add(key);
+        existing.set(key, cue);
+        repairedCues.push({ ...cue });
+      }
+      if (changed) {
+        localStorage.setItem(CUSTOM_CUES_KEY, JSON.stringify(repairedCues));
+      }
+      if (reassigned) {
+        log(`已修復 ${reassigned} 則新增招式的重複 ID`, "ok");
+      }
+      if (absorbed) {
+        log(`已合併 ${absorbed} 則已採用的本機招式`, "ok");
       }
       return data;
     }
@@ -3828,9 +3874,7 @@
     }
 
     function nextCustomCueIndex(phase) {
-      return Math.max(1000, ...editorState.cues
-        .filter((cue) => cue.phase === phase && cue.custom)
-        .map((cue) => Number(cue.cue_index || 0))) + 1;
+      return nextAvailableCustomCueIndex(phase, editorState.cues);
     }
 
     function addEditorCue(text) {
