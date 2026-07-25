@@ -436,15 +436,26 @@
     .railCue {
       position: absolute;
       top: 42px;
-      width: 9px;
+      width: 11px;
       height: 44px;
       padding: 0;
       border-radius: 2px;
       border: 1px solid #9eafc2;
       background: #49637e;
-      transform: translateX(-4px);
+      transform: translateX(-5px);
+      cursor: ew-resize;
+      touch-action: none;
     }
     .railCue.selected { width: 15px; transform: translateX(-7px); background: #ffd166; border-color: #fff; }
+    .railCue.dragging {
+      width: 17px;
+      transform: translateX(-8px);
+      background: #6dd5ff;
+      border-color: #fff;
+      box-shadow: 0 0 0 2px #216b87, 0 0 12px rgba(109, 213, 255, 0.75);
+      z-index: 4;
+    }
+    .editorRailViewport.dragging { user-select: none; cursor: ew-resize; }
     .railCue.playing {
       width: 15px;
       transform: translateX(-7px);
@@ -699,7 +710,9 @@
     const STATIC_DEPLOYMENT = true;
     const STATIC_ASSET_BASE_URL = new URL("./", window.location.href);
     const FEEDBACK_API_URL = "https://maplestorym-black-mage-timer.jrychang0621.chatgpt.site/api/timeline-feedback";
+    const PUBLISHED_TIMELINE_API_URL = "https://maplestorym-black-mage-timer.jrychang0621.chatgpt.site/api/published-timeline";
     const IS_GITHUB_PAGES = window.location.hostname.endsWith(".github.io");
+    const EDITOR_RAIL_PX_PER_SECOND = 10;
     const STATIC_TIMELINE_KEY = "blackMageWeb2TimelineChanges";
     const CUSTOM_CUES_KEY = "blackMageEditorCustomCues";
     const CUSTOM_SKILLS_KEY = "blackMageEditorCustomSkills";
@@ -792,6 +805,8 @@
       pendingCaptureRequest: null,
       autoDetectAfterYoutubeReady: false,
       titleBeforeScan: "",
+      railDrag: null,
+      suppressRailClick: false,
     };
 
     function setText(id, text, cls = "") {
@@ -869,6 +884,77 @@
       cue.duration_s = Number(match?.duration_s || cue.duration_s || Math.max(0.8, String(cue.text || "").length * 0.22));
     }
 
+    async function loadPublishedTimelineChanges() {
+      const response = await fetch(PUBLISHED_TIMELINE_API_URL, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || response.statusText);
+      }
+      return Array.isArray(payload.changes) ? payload.changes : [];
+    }
+
+    function applyPublishedTimelineChanges(data, changes) {
+      if (!Array.isArray(data?.timeline) || !Array.isArray(changes)) return 0;
+      const byKey = new Map(data.timeline.map((cue) => [`${cue.phase}:${cue.cue_index}`, cue]));
+      let applied = 0;
+      for (const change of changes) {
+        const phase = String(change.phase || "");
+        const cueIndex = Number(change.cue_index);
+        const operation = String(change.operation || "update");
+        const text = String(change.text || "").trim();
+        const startS = Number(change.start_s);
+        const leadS = Number(change.lead_s);
+        if (!PHASE_ORDER.includes(phase)
+            || !Number.isInteger(cueIndex)
+            || cueIndex < 1
+            || !text
+            || !Number.isFinite(startS)
+            || !Number.isFinite(leadS)) {
+          continue;
+        }
+        const key = `${phase}:${cueIndex}`;
+        let cue = byKey.get(key);
+        if (!cue && operation === "delete") continue;
+        if (!cue) {
+          cue = {
+            phase,
+            cue_index: cueIndex,
+            text,
+            start_s: Math.max(0, startS),
+            end_s: Math.max(0, startS),
+            lead_s: leadS,
+            offset_s: 0,
+            enabled: Boolean(change.enabled),
+            deleted: false,
+            custom: false,
+            published: true,
+            clip_url: "",
+            clip_path: "",
+            duration_s: Math.max(0.8, text.length * 0.22),
+          };
+          data.timeline.push(cue);
+          byKey.set(key, cue);
+        } else {
+          const oldStartS = Number(cue.start_s || 0);
+          const durationS = Math.max(0, Number(cue.end_s ?? oldStartS) - oldStartS);
+          cue.text = text;
+          cue.start_s = Math.max(0, startS);
+          cue.end_s = cue.start_s + durationS;
+          cue.lead_s = leadS;
+          cue.enabled = Boolean(change.enabled);
+          cue.custom = false;
+          cue.published = true;
+        }
+        cue.deleted = operation === "delete";
+        if (cue.deleted) cue.enabled = false;
+        cue.scheduled_s = Math.max(0, Number(cue.start_s || 0) + Number(cue.offset_s || 0) - Number(cue.lead_s || 0));
+        applyCueVoice(cue);
+        applied += 1;
+      }
+      data.timeline_enabled_count = data.timeline.filter((cue) => cue.enabled && !cue.deleted).length;
+      return applied;
+    }
+
     function appendStoredCustomCues(data) {
       if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
       const existing = new Set(data.timeline.map((cue) => `${cue.phase}:${cue.cue_index}`));
@@ -905,7 +991,7 @@
       const stored = readStoredTimelineChanges();
       for (const cue of data.timeline) {
         cue.custom = false;
-        cue.deleted = false;
+        cue.deleted = Boolean(cue.deleted);
         const change = stored[`${cue.phase}:${cue.cue_index}`];
         if (!change) continue;
         cue.text = String(change.text ?? cue.text ?? "").trim() || cue.text;
@@ -1910,6 +1996,14 @@
       if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText);
       if (IS_GITHUB_PAGES && data.baseline_replay) {
         data.baseline_replay = { ...data.baseline_replay, available: false, url: "" };
+      }
+      state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
+      try {
+        const publishedChanges = await loadPublishedTimelineChanges();
+        const publishedCount = applyPublishedTimelineChanges(data, publishedChanges);
+        if (publishedCount) log(`已載入正式時間軸調整 ${publishedCount} 則`, "ok");
+      } catch (error) {
+        log(`正式時間軸同步失敗，使用內建版本：${error.message}`, "badText");
       }
       state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
       applyStoredTimelineChanges(data);
@@ -3443,20 +3537,89 @@
     function renderEditorRail() {
       const cues = editorPhaseCues();
       const duration = Math.max(90, ...cues.map((cue) => editorScheduledS(cue) + 12));
-      editorState.railWidth = Math.max(900, Math.ceil(duration * 10));
+      editorState.railWidth = Math.max(900, Math.ceil(duration * EDITOR_RAIL_PX_PER_SECOND));
       const ticks = [];
       for (let second = 0; second <= duration; second += 10) {
-        ticks.push(`<span class="railTick" style="left:${second * 10}px">${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")}</span>`);
+        ticks.push(`<span class="railTick" style="left:${second * EDITOR_RAIL_PX_PER_SECOND}px">${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")}</span>`);
       }
       const markers = cues.map((cue) => {
         const key = editorCueKey(cue);
         const selected = key === editorState.selectedKey ? "selected" : "";
         const playing = key === editorState.playbackCueKey ? "playing" : "";
         const scheduledS = editorScheduledS(cue);
-        return `<button class="railCue ${selected} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * 10}px" title="${escapeHtml(`提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}"></button>`;
+        return `<button class="railCue ${selected} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px" title="${escapeHtml(`拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}" aria-label="拖曳調整 ${escapeHtml(cue.text || "")}"></button>`;
       });
       els.editorRail.style.width = `${editorState.railWidth}px`;
       els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead"></span>`;
+    }
+
+    function beginEditorRailDrag(event) {
+      if (event.button !== 0) return;
+      const marker = event.target.closest(".railCue[data-editor-key]");
+      if (!marker) return;
+      const cue = editorCueByKey(marker.dataset.editorKey);
+      if (!cue) return;
+      editorPause();
+      editorState.phase = cue.phase;
+      editorState.selectedKey = editorCueKey(cue);
+      editorState.railDrag = {
+        cue,
+        marker,
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        originalStartS: Number(cue.start_s || 0),
+        durationS: Math.max(0, Number(cue.end_s ?? cue.start_s ?? 0) - Number(cue.start_s || 0)),
+        moved: false,
+      };
+      marker.setPointerCapture?.(event.pointerId);
+      for (const item of els.editorRail.querySelectorAll(".railCue.selected")) item.classList.remove("selected");
+      marker.classList.add("selected");
+      renderEditorSelected();
+      renderEditorTable();
+      event.preventDefault();
+    }
+
+    function moveEditorRailDrag(event) {
+      const drag = editorState.railDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaPx = event.clientX - drag.startClientX;
+      if (!drag.moved && Math.abs(deltaPx) < 3) return;
+      drag.moved = true;
+      drag.marker.classList.add("dragging");
+      els.editorRailViewport.classList.add("dragging");
+      const deltaS = deltaPx / EDITOR_RAIL_PX_PER_SECOND;
+      const nextStartS = Math.max(0, Math.round((drag.originalStartS + deltaS) * 10) / 10);
+      drag.cue.start_s = nextStartS;
+      drag.cue.end_s = nextStartS + drag.durationS;
+      markEditorDirty(drag.cue);
+      const scheduledS = editorScheduledS(drag.cue);
+      drag.marker.style.left = `${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px`;
+      drag.marker.title = `拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(nextStartS)} · ${drag.cue.text}`;
+      renderEditorSelected();
+      setEditorStatus(`${drag.cue.phase}#${drag.cue.cue_index} 調整到 ${fmt(nextStartS)}`, "dirty");
+      event.preventDefault();
+    }
+
+    function endEditorRailDrag(event) {
+      const drag = editorState.railDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      editorState.railDrag = null;
+      drag.marker.releasePointerCapture?.(event.pointerId);
+      els.editorRailViewport.classList.remove("dragging");
+      if (!drag.moved) return;
+      const canceled = event.type === "pointercancel";
+      if (canceled) {
+        drag.cue.start_s = drag.originalStartS;
+        drag.cue.end_s = drag.originalStartS + drag.durationS;
+        markEditorDirty(drag.cue);
+      }
+      editorState.suppressRailClick = true;
+      renderEditorRail();
+      renderEditorTable();
+      renderEditorSelected();
+      if (!canceled) playEditorCueFromPrompt(drag.cue);
+      window.setTimeout(() => { editorState.suppressRailClick = false; }, 0);
+      event.preventDefault();
     }
 
     function renderEditor() {
@@ -3824,7 +3987,7 @@
       const playhead = document.getElementById("editorRailPlayhead");
       if (!playhead) return;
       const relative = currentS - editorHudTime();
-      playhead.style.left = `${Math.max(0, Math.min(editorState.railWidth, relative * 10))}px`;
+      playhead.style.left = `${Math.max(0, Math.min(editorState.railWidth, relative * EDITOR_RAIL_PX_PER_SECOND))}px`;
       playhead.style.display = relative >= 0 ? "block" : "none";
     }
 
@@ -4133,7 +4296,15 @@
         const row = event.target.closest("[data-editor-key]");
         if (row) selectEditorCue(row.dataset.editorKey);
       });
+      els.editorRail.addEventListener("pointerdown", beginEditorRailDrag);
+      window.addEventListener("pointermove", moveEditorRailDrag);
+      window.addEventListener("pointerup", endEditorRailDrag);
+      window.addEventListener("pointercancel", endEditorRailDrag);
       els.editorRail.addEventListener("click", (event) => {
+        if (editorState.suppressRailClick) {
+          event.preventDefault();
+          return;
+        }
         const marker = event.target.closest("[data-editor-key]");
         if (marker) selectEditorCue(marker.dataset.editorKey);
       });
