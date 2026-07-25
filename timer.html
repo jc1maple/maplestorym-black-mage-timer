@@ -431,7 +431,7 @@
       height: 106px;
       margin-bottom: 10px;
     }
-    .editorRail { position: relative; height: 104px; min-width: 100%; }
+    .editorRail { position: relative; height: 104px; min-width: 100%; cursor: pointer; }
     .railTick { position: absolute; top: 0; bottom: 0; border-left: 1px solid #303741; color: #929dab; font-size: 11px; padding-left: 4px; }
     .railCue {
       position: absolute;
@@ -3622,6 +3622,21 @@
       event.preventDefault();
     }
 
+    function seekEditorRailAt(clientX) {
+      const rect = els.editorRail.getBoundingClientRect();
+      const railX = Math.max(0, Math.min(editorState.railWidth, clientX - rect.left));
+      const phaseS = railX / EDITOR_RAIL_PX_PER_SECOND;
+      const targetS = editorHudTime() + phaseS;
+      seekEditorVideo(targetS);
+      const playhead = document.getElementById("editorRailPlayhead");
+      if (playhead) {
+        playhead.style.left = `${railX}px`;
+        playhead.style.display = "block";
+      }
+      els.editorVideoTime.textContent = fmt(targetS);
+      updateEditorPlaybackHighlight(targetS);
+    }
+
     function renderEditor() {
       for (const button of document.querySelectorAll("[data-editor-phase]")) {
         const phase = button.dataset.editorPhase;
@@ -4306,7 +4321,11 @@
           return;
         }
         const marker = event.target.closest("[data-editor-key]");
-        if (marker) selectEditorCue(marker.dataset.editorKey);
+        if (marker) {
+          selectEditorCue(marker.dataset.editorKey);
+          return;
+        }
+        seekEditorRailAt(event.clientX);
       });
       els.editorFilter.addEventListener("input", renderEditorTable);
       els.editorTextInput.addEventListener("input", () => updateSelectedEditorCue({ text: els.editorTextInput.value }));
