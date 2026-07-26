@@ -777,6 +777,7 @@
     const IS_GITHUB_PAGES = window.location.hostname.endsWith(".github.io");
     const EDITOR_RAIL_PX_PER_SECOND = 10;
     const STATIC_TIMELINE_KEY = "blackMageWeb2TimelineChanges";
+    const P4_TIMELINE_REVISION_KEY = "blackMageP4TimelineRevision";
     const CUSTOM_CUES_KEY = "blackMageEditorCustomCues";
     const CUSTOM_SKILLS_KEY = "blackMageEditorCustomSkills";
     const P1_VARIANT_KEY = "blackMageP1HasShia";
@@ -1001,6 +1002,17 @@
       }
     }
 
+    function clearStaleP4TimelineChanges(data, stored) {
+      const revision = String(data?.p4_timeline_source?.revision || "");
+      if (!revision || localStorage.getItem(P4_TIMELINE_REVISION_KEY) === revision) return stored;
+      for (const key of Object.keys(stored)) {
+        if (key.startsWith("P4:")) delete stored[key];
+      }
+      localStorage.setItem(STATIC_TIMELINE_KEY, JSON.stringify(stored));
+      localStorage.setItem(P4_TIMELINE_REVISION_KEY, revision);
+      return stored;
+    }
+
     function readStoredCustomCues() {
       try {
         const value = JSON.parse(localStorage.getItem(CUSTOM_CUES_KEY) || "[]");
@@ -1188,7 +1200,7 @@
 
     function applyStoredTimelineChanges(data) {
       if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
-      const stored = readStoredTimelineChanges();
+      const stored = clearStaleP4TimelineChanges(data, readStoredTimelineChanges());
       for (const cue of data.timeline) {
         cue.custom = false;
         cue.deleted = Boolean(cue.deleted);
