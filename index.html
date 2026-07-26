@@ -360,6 +360,21 @@
     .editorPhaseTabs { margin-top: 14px; }
     .editorPhaseTabs button { flex: 1 1 130px; min-width: 120px; font-variant-numeric: tabular-nums; }
     .editorPhaseTabs button.active { background: #1f5134; border-color: #48a66b; }
+    .p1VariantToggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid #3c4653;
+      border-radius: 6px;
+      background: #11161d;
+      color: var(--text);
+      font-weight: 800;
+    }
+    .p1VariantToggle input { width: 18px; height: 18px; accent-color: #48a66b; }
+    .editorP1VariantRow { display: flex; margin-top: 10px; }
+    .editorP1VariantRow[hidden] { display: none; }
     .phaseAlignment {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -596,6 +611,7 @@
         <label>語音音量 <input id="volumeInput" type="range" min="0" max="100" step="5" value="100"></label>
         <span id="volumeText">100%</span>
         <label><input id="muteInput" type="checkbox"> 靜音</label>
+        <label class="p1VariantToggle"><input id="p1ShiaInput" type="checkbox" checked> P1 有施雅</label>
         <label>偵測門檻 <input id="thresholdInput" type="number" min="0.70" max="0.98" step="0.01" value="0.84"></label>
       </div>
       <div class="manual">
@@ -667,6 +683,9 @@
         <button data-editor-phase="P2">P2</button>
         <button data-editor-phase="P3">P3</button>
         <button data-editor-phase="P4">P4</button>
+      </div>
+      <div id="editorP1VariantRow" class="editorP1VariantRow">
+        <label class="p1VariantToggle"><input id="editorP1ShiaInput" type="checkbox" checked> P1 有施雅</label>
       </div>
       <div class="phaseAlignment">
         <label>HUD 影片時間 <input id="editorHudInput" type="number" min="0" step="0.001" value="0"></label>
@@ -749,6 +768,10 @@
     const STATIC_TIMELINE_KEY = "blackMageWeb2TimelineChanges";
     const CUSTOM_CUES_KEY = "blackMageEditorCustomCues";
     const CUSTOM_SKILLS_KEY = "blackMageEditorCustomSkills";
+    const P1_VARIANT_KEY = "blackMageP1HasShia";
+    const P1_VARIANT_SHIA = "shia";
+    const P1_VARIANT_NO_SHIA = "no_shia";
+    const DEFAULT_TIMELINE_VARIANT = "default";
     const FEEDBACK_REPORTER_KEY = "blackMageWeb2FeedbackReporter";
     const EDITOR_YOUTUBE_KEY = "blackMageEditorYoutubeUrl";
     const DEFAULT_EDITOR_YOUTUBE_URL = "https://youtu.be/UxH_aFs8aa0";
@@ -783,6 +806,7 @@
       audioTotal: 0,
       volume: 1,
       audioMuted: false,
+      p1HasShia: true,
       extraLeadS: 0,
       threshold: 0.84,
       selfTesting: false,
@@ -805,6 +829,7 @@
     };
     const editorState = {
       phase: "P1",
+      p1HasShia: true,
       cues: [],
       originalByKey: new Map(),
       dirtyKeys: new Set(),
@@ -842,6 +867,84 @@
       railSeekDrag: null,
       suppressRailClick: false,
     };
+
+    function normalizeTimelineVariant(phase, value) {
+      if (phase !== "P1") return DEFAULT_TIMELINE_VARIANT;
+      return value === P1_VARIANT_NO_SHIA ? P1_VARIANT_NO_SHIA : P1_VARIANT_SHIA;
+    }
+
+    function cueTimelineVariant(cue) {
+      return normalizeTimelineVariant(String(cue?.phase || ""), String(cue?.timeline_variant || ""));
+    }
+
+    function selectedP1Variant(hasShia) {
+      return hasShia ? P1_VARIANT_SHIA : P1_VARIANT_NO_SHIA;
+    }
+
+    function liveTimelineVariant(phase) {
+      return phase === "P1" ? selectedP1Variant(state.p1HasShia) : DEFAULT_TIMELINE_VARIANT;
+    }
+
+    function editorTimelineVariant(phase = editorState.phase) {
+      return phase === "P1" ? selectedP1Variant(editorState.p1HasShia) : DEFAULT_TIMELINE_VARIANT;
+    }
+
+    function timelineVariantLabel(variant) {
+      return variant === P1_VARIANT_NO_SHIA ? "無施雅" : "有施雅";
+    }
+
+    function phaseDisplayLabel(phase, variant = liveTimelineVariant(phase)) {
+      return phase === "P1" ? `P1 ${timelineVariantLabel(variant)}` : phase;
+    }
+
+    function timelineCueKey(cue) {
+      return `${cue.phase}:${cueTimelineVariant(cue)}:${cue.cue_index}`;
+    }
+
+    function expandTimelineVariants(data) {
+      if (!Array.isArray(data?.timeline)) return data;
+      const expanded = [];
+      for (const cue of data.timeline) {
+        const phase = String(cue.phase || "");
+        const rawVariant = String(cue.timeline_variant || "");
+        if (phase === "P1" && rawVariant !== P1_VARIANT_SHIA && rawVariant !== P1_VARIANT_NO_SHIA) {
+          expanded.push({ ...cue, timeline_variant: P1_VARIANT_SHIA });
+          expanded.push({ ...cue, timeline_variant: P1_VARIANT_NO_SHIA });
+          continue;
+        }
+        expanded.push({ ...cue, timeline_variant: normalizeTimelineVariant(phase, rawVariant) });
+      }
+      data.timeline = expanded;
+      return data;
+    }
+
+    function publishedChangeVariants(change, phase) {
+      const rawVariant = String(change?.timeline_variant || "");
+      if (phase !== "P1") return [DEFAULT_TIMELINE_VARIANT];
+      if (rawVariant === P1_VARIANT_SHIA || rawVariant === P1_VARIANT_NO_SHIA) return [rawVariant];
+      return [P1_VARIANT_SHIA, P1_VARIANT_NO_SHIA];
+    }
+
+    function cueMatchesEditorVariant(cue) {
+      return cue.phase !== "P1" || cueTimelineVariant(cue) === editorTimelineVariant("P1");
+    }
+
+    function rebuildTimelineByPhase() {
+      if (!Array.isArray(state.assets?.timeline)) return;
+      for (const phase of PHASE_ORDER) {
+        const variant = liveTimelineVariant(phase);
+        state.timelineByPhase[phase] = state.assets.timeline
+          .filter((cue) => cue.enabled
+            && !cue.deleted
+            && cue.phase === phase
+            && cueTimelineVariant(cue) === variant)
+          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      }
+    }
+
+    function selectedTimelineCueCount() {
+      return PHASE_ORDER.reduce((total, phase) => total + (state.timelineByPhase[phase] || []).length, 0);
+    }
 
     function setText(id, text, cls = "") {
       const el = els[id];
@@ -929,7 +1032,7 @@
 
     function applyPublishedTimelineChanges(data, changes) {
       if (!Array.isArray(data?.timeline) || !Array.isArray(changes)) return 0;
-      const byKey = new Map(data.timeline.map((cue) => [`${cue.phase}:${cue.cue_index}`, cue]));
+      const byKey = new Map(data.timeline.map((cue) => [timelineCueKey(cue), cue]));
       let applied = 0;
       for (const change of changes) {
         const phase = String(change.phase || "");
@@ -946,52 +1049,55 @@
             || !Number.isFinite(leadS)) {
           continue;
         }
-        const key = `${phase}:${cueIndex}`;
-        let cue = byKey.get(key);
-        if (!cue && operation === "delete") continue;
-        if (!cue) {
-          cue = {
-            phase,
-            cue_index: cueIndex,
-            text,
-            start_s: Math.max(0, startS),
-            end_s: Math.max(0, startS),
-            lead_s: leadS,
-            offset_s: 0,
-            enabled: Boolean(change.enabled),
-            deleted: false,
-            custom: false,
-            published: true,
-            clip_url: "",
-            clip_path: "",
-            duration_s: Math.max(0.8, text.length * 0.22),
-          };
-          data.timeline.push(cue);
-          byKey.set(key, cue);
-        } else {
-          const oldStartS = Number(cue.start_s || 0);
-          const durationS = Math.max(0, Number(cue.end_s ?? oldStartS) - oldStartS);
-          cue.text = text;
-          cue.start_s = Math.max(0, startS);
-          cue.end_s = cue.start_s + durationS;
-          cue.lead_s = leadS;
-          cue.enabled = Boolean(change.enabled);
-          cue.custom = false;
-          cue.published = true;
+        for (const variant of publishedChangeVariants(change, phase)) {
+          const key = `${phase}:${variant}:${cueIndex}`;
+          let cue = byKey.get(key);
+          if (!cue && operation === "delete") continue;
+          if (!cue) {
+            cue = {
+              phase,
+              timeline_variant: variant,
+              cue_index: cueIndex,
+              text,
+              start_s: Math.max(0, startS),
+              end_s: Math.max(0, startS),
+              lead_s: leadS,
+              offset_s: 0,
+              enabled: Boolean(change.enabled),
+              deleted: false,
+              custom: false,
+              published: true,
+              clip_url: "",
+              clip_path: "",
+              duration_s: Math.max(0.8, text.length * 0.22),
+            };
+            data.timeline.push(cue);
+            byKey.set(key, cue);
+          } else {
+            const oldStartS = Number(cue.start_s || 0);
+            const durationS = Math.max(0, Number(cue.end_s ?? oldStartS) - oldStartS);
+            cue.text = text;
+            cue.start_s = Math.max(0, startS);
+            cue.end_s = cue.start_s + durationS;
+            cue.lead_s = leadS;
+            cue.enabled = Boolean(change.enabled);
+            cue.custom = false;
+            cue.published = true;
+          }
+          cue.deleted = operation === "delete";
+          if (cue.deleted) cue.enabled = false;
+          cue.scheduled_s = Math.max(0, Number(cue.start_s || 0) + Number(cue.offset_s || 0) - Number(cue.lead_s || 0));
+          applyCueVoice(cue);
+          applied += 1;
         }
-        cue.deleted = operation === "delete";
-        if (cue.deleted) cue.enabled = false;
-        cue.scheduled_s = Math.max(0, Number(cue.start_s || 0) + Number(cue.offset_s || 0) - Number(cue.lead_s || 0));
-        applyCueVoice(cue);
-        applied += 1;
       }
       data.timeline_enabled_count = data.timeline.filter((cue) => cue.enabled && !cue.deleted).length;
       return applied;
     }
 
-    function nextAvailableCustomCueIndex(phase, cues) {
+    function nextAvailableCustomCueIndex(phase, variant, cues) {
       const used = new Set((cues || [])
-        .filter((cue) => cue.phase === phase)
+        .filter((cue) => cue.phase === phase && cueTimelineVariant(cue) === variant)
         .map((cue) => Number(cue.cue_index))
         .filter((cueIndex) => Number.isInteger(cueIndex) && cueIndex >= 1001));
       let candidate = 1001;
@@ -1008,7 +1114,7 @@
 
     function appendStoredCustomCues(data) {
       if (!STATIC_DEPLOYMENT || !Array.isArray(data?.timeline)) return data;
-      const existing = new Map(data.timeline.map((cue) => [`${cue.phase}:${cue.cue_index}`, cue]));
+      const existing = new Map(data.timeline.map((cue) => [timelineCueKey(cue), cue]));
       const storedCues = readStoredCustomCues();
       const repairedCues = [];
       let reassigned = 0;
@@ -1016,13 +1122,14 @@
       let changed = false;
       for (const raw of storedCues) {
         const phase = String(raw.phase || "");
+        const variant = normalizeTimelineVariant(phase, String(raw.timeline_variant || ""));
         let cueIndex = Number(raw.cue_index);
         const text = String(raw.text || "").trim();
         if (!PHASE_ORDER.includes(phase) || !Number.isInteger(cueIndex) || cueIndex < 1001 || !text) {
           changed = true;
           continue;
         }
-        let key = `${phase}:${cueIndex}`;
+        let key = `${phase}:${variant}:${cueIndex}`;
         const occupiedCue = existing.get(key);
         if (occupiedCue && cuesHaveSameDefinition(raw, occupiedCue)) {
           absorbed += 1;
@@ -1030,14 +1137,15 @@
           continue;
         }
         if (occupiedCue) {
-          cueIndex = nextAvailableCustomCueIndex(phase, data.timeline);
-          key = `${phase}:${cueIndex}`;
+          cueIndex = nextAvailableCustomCueIndex(phase, variant, data.timeline);
+          key = `${phase}:${variant}:${cueIndex}`;
           reassigned += 1;
           changed = true;
         }
         const cue = {
           ...raw,
           phase,
+          timeline_variant: variant,
           cue_index: cueIndex,
           text,
           start_s: Math.max(0, Number(raw.start_s || 0)),
@@ -1072,7 +1180,10 @@
       for (const cue of data.timeline) {
         cue.custom = false;
         cue.deleted = Boolean(cue.deleted);
-        const change = stored[`${cue.phase}:${cue.cue_index}`];
+        const legacyChange = cue.phase !== "P1" || cueTimelineVariant(cue) === P1_VARIANT_SHIA
+          ? stored[`${cue.phase}:${cue.cue_index}`]
+          : null;
+        const change = stored[timelineCueKey(cue)] || legacyChange;
         if (!change) continue;
         cue.text = String(change.text ?? cue.text ?? "").trim() || cue.text;
         cue.start_s = Number(change.start_s ?? cue.start_s ?? 0);
@@ -1107,7 +1218,7 @@
       if (state.pending) {
         const remain = Math.max(0, (state.pending.hudMs - now) / 1000);
         panel.dataset.urgency = "soon";
-        els.prompterPhase.textContent = `${state.pending.phase} 過場已偵測`;
+        els.prompterPhase.textContent = `${phaseDisplayLabel(state.pending.phase)} 過場已偵測`;
         els.prompterPhaseTime.textContent = "等待 HUD";
         els.prompterLabel.textContent = "階段即將開始";
         els.prompterMove.textContent = "等待 HUD";
@@ -1118,10 +1229,11 @@
       }
       if (!state.activePhase) {
         panel.dataset.urgency = "idle";
-        els.prompterPhase.textContent = `等待 ${expectedPhase()} 過場`;
+        const expectedLabel = phaseDisplayLabel(expectedPhase());
+        els.prompterPhase.textContent = `等待 ${expectedLabel} 過場`;
         els.prompterPhaseTime.textContent = "--:--.---";
         els.prompterLabel.textContent = "下一階段";
-        els.prompterMove.textContent = expectedPhase() === "-" ? "已停止" : `等待 ${expectedPhase()}`;
+        els.prompterMove.textContent = expectedPhase() === "-" ? "已停止" : `等待 ${expectedLabel}`;
         els.prompterSeconds.textContent = "--";
         els.prompterUnit.textContent = "秒";
         els.prompterFollowing.innerHTML = "";
@@ -1129,7 +1241,7 @@
       }
 
       const elapsed = Math.max(0, (now - state.phaseStartMs) / 1000);
-      els.prompterPhase.textContent = `${state.activePhase} 進行中`;
+      els.prompterPhase.textContent = `${phaseDisplayLabel(state.activePhase)} 進行中`;
       els.prompterPhaseTime.textContent = fmt(elapsed);
       if (state.currentCue && now < state.currentCueUntilMs) {
         panel.dataset.urgency = "now";
@@ -1169,7 +1281,7 @@
     }
 
     function cueKey(cue) {
-      return `${cue.phase}:${cue.cue_index}:${cue.text}:${cue.scheduled_s}`;
+      return `${timelineCueKey(cue)}:${cue.text}:${cue.scheduled_s}`;
     }
 
     function expectedPhase() {
@@ -1183,7 +1295,7 @@
         const active = phase === state.activePhase ? "active" : "";
         const detected = state.expectedIndex > PHASE_ORDER.indexOf(phase) ? "detected" : "";
         return `<div class="phaseCard ${active} ${detected}">
-          <strong>${phase}</strong>
+          <strong>${phaseDisplayLabel(phase)}</strong>
           <span>${played}/${count} 句</span>
           <span>${phase === state.activePhase ? fmt((performance.now() - state.phaseStartMs) / 1000) : detected ? "已經過" : "等待"}</span>
         </div>`;
@@ -1234,7 +1346,7 @@
       state.lastScanTelemetryMs = 0;
       state.contentRectLock = null;
       state.lastWideSearchMs = 0;
-      setText("status", "等待 P1 過場", "ok");
+      setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
       setText("phase", "-");
       setText("phaseTime", "--:--.---");
       setText("expected", "P1");
@@ -1245,7 +1357,7 @@
       renderPhaseCards();
       renderTimeline();
       postEvent({ event_type: "reset", phase: "" });
-      log("重置：等待 P1 過場", "warnText");
+      log(`重置：等待 ${phaseDisplayLabel("P1")} 過場`, "warnText");
     }
 
     function stopAllAudio() {
@@ -2077,6 +2189,7 @@
       if (IS_GITHUB_PAGES && data.baseline_replay) {
         data.baseline_replay = { ...data.baseline_replay, available: false, url: "" };
       }
+      expandTimelineVariants(data);
       state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
       try {
         const publishedChanges = await loadPublishedTimelineChanges();
@@ -2089,6 +2202,8 @@
       applyStoredTimelineChanges(data);
       appendStoredCustomCues(data);
       editorState.customSkillTexts = new Set(readStoredCustomSkills());
+      state.p1HasShia = localStorage.getItem(P1_VARIANT_KEY) !== "false";
+      editorState.p1HasShia = state.p1HasShia;
       state.assets = data;
       const storedEditorYoutube = localStorage.getItem(EDITOR_YOUTUBE_KEY) || "";
       const storedEditorYoutubeId = parseYoutubeVideoId(storedEditorYoutube);
@@ -2103,11 +2218,7 @@
       loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
         els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
       });
-      for (const phase of PHASE_ORDER) {
-        state.timelineByPhase[phase] = data.timeline
-          .filter((cue) => cue.enabled && !cue.deleted && cue.phase === phase)
-          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
-      }
+      rebuildTimelineByPhase();
       const count = await loadTemplates();
       const thresholdOverride = Number(new URLSearchParams(location.search).get("threshold"));
       state.threshold = Number.isFinite(thresholdOverride) && thresholdOverride >= 0.7
@@ -2121,16 +2232,18 @@
       els.leadInput.value = state.extraLeadS.toFixed(1);
       els.volumeInput.value = Math.round(state.volume * 100);
       els.muteInput.checked = state.audioMuted;
+      els.p1ShiaInput.checked = state.p1HasShia;
+      els.editorP1ShiaInput.checked = editorState.p1HasShia;
       els.editorVoiceInput.checked = editorState.voiceEnabled;
       els.volumeText.textContent = `${Math.round(state.volume * 100)}%`;
-      setText("status", "等待 P1 過場", "ok");
-      els.topStatus.textContent = `模板 ${count}，語音 ${data.timeline_enabled_count} 句`;
+      setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
+      els.topStatus.textContent = `模板 ${count}，語音 ${selectedTimelineCueCount()} 句`;
       renderPhaseCards();
       renderTimeline();
       els.editorBaselineBtn.hidden = true;
       updateAudioStatus();
       startTicker();
-      log(`載入完成：模板 ${count}，提示 ${data.timeline_enabled_count} 句`, "ok");
+      log(`載入完成：模板 ${count}，提示 ${selectedTimelineCueCount()} 句`, "ok");
     }
 
     function startTicker() {
@@ -2260,12 +2373,14 @@
       state.expectedIndex = Math.max(state.expectedIndex, PHASE_ORDER.indexOf(phase) + 1);
       state.currentCue = null;
       state.currentCueUntilMs = 0;
-      setText("phase", phase, "ok");
-      setText("status", `${phase} 計時中`, "ok");
-      log(`${phase} 開始計時 (${reason})`, "ok");
+      const phaseLabel = phaseDisplayLabel(phase);
+      setText("phase", phaseLabel, "ok");
+      setText("status", `${phaseLabel} 計時中`, "ok");
+      log(`${phaseLabel} 開始計時 (${reason})`, "ok");
       postEvent({
         event_type: "phase_start",
         phase,
+        timeline_variant: liveTimelineVariant(phase),
         reason,
         enabled_cue_count: state.activeCues.length,
       });
@@ -2377,7 +2492,7 @@
         state.running = true;
         els.placeholder.style.display = "none";
         resetRun();
-        setText("status", "等待 P1 過場", "ok");
+        setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
         log("畫面分享已開始", "ok");
         postEvent({ event_type: "screen_share_start", phase: "" });
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
@@ -2493,7 +2608,7 @@
     }
 
     function editorCueKey(cue) {
-      return `${cue.phase}:${cue.cue_index}`;
+      return timelineCueKey(cue);
     }
 
     function editorCueByKey(key) {
@@ -2502,7 +2617,9 @@
 
     function editorPhaseCues() {
       return editorState.cues
-        .filter((cue) => cue.phase === editorState.phase && !cue.deleted)
+        .filter((cue) => cue.phase === editorState.phase
+          && cueTimelineVariant(cue) === editorTimelineVariant()
+          && !cue.deleted)
         .sort((a, b) => Number(a.start_s || 0) - Number(b.start_s || 0) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
     }
 
@@ -2536,9 +2653,16 @@
           editorState.hudTimes[phase] = previousHudTimes[phase];
         }
       }
-      editorState.selectedKey = editorCueByKey(previousSelected)
+      const previousCue = editorCueByKey(previousSelected);
+      editorState.selectedKey = previousCue
+          && previousCue.phase === editorState.phase
+          && cueTimelineVariant(previousCue) === editorTimelineVariant()
         ? previousSelected
-        : editorCueKey(editorPhaseCues()[0] || { phase: editorState.phase, cue_index: 0 });
+        : editorCueKey(editorPhaseCues()[0] || {
+          phase: editorState.phase,
+          timeline_variant: editorTimelineVariant(),
+          cue_index: 0,
+        });
       renderEditor();
     }
 
@@ -3763,14 +3887,17 @@
     }
 
     function renderEditor() {
+      els.editorP1VariantRow.hidden = editorState.phase !== "P1";
+      els.editorP1ShiaInput.checked = editorState.p1HasShia;
       for (const button of document.querySelectorAll("[data-editor-phase]")) {
         const phase = button.dataset.editorPhase;
         const anchor = editorState.hudTimes[phase];
+        const phaseLabel = phaseDisplayLabel(phase, editorTimelineVariant(phase));
         button.classList.toggle("active", phase === editorState.phase);
-        button.textContent = Number.isFinite(anchor) ? `${phase} ${fmt(anchor)}` : `${phase} --:--`;
+        button.textContent = Number.isFinite(anchor) ? `${phaseLabel} ${fmt(anchor)}` : `${phaseLabel} --:--`;
         button.title = Number.isFinite(anchor)
-          ? `${phase} HUD ${fmt(anchor)} · ${editorState.phaseMethods[phase] || "手動"}`
-          : `${phase} 尚未偵測`;
+          ? `${phaseLabel} HUD ${fmt(anchor)} · ${editorState.phaseMethods[phase] || "手動"}`
+          : `${phaseLabel} 尚未偵測`;
       }
       const selectedHud = editorState.hudTimes[editorState.phase];
       els.editorHudInput.value = Number.isFinite(selectedHud) ? selectedHud.toFixed(3) : "";
@@ -3831,7 +3958,9 @@
       editorPause();
       editorState.phase = phase;
       const current = editorCueByKey(editorState.selectedKey);
-      if (!current || current.phase !== phase) {
+      if (!current
+          || current.phase !== phase
+          || cueTimelineVariant(current) !== editorTimelineVariant(phase)) {
         const first = editorPhaseCues()[0];
         editorState.selectedKey = first ? editorCueKey(first) : "";
       }
@@ -3874,7 +4003,7 @@
     }
 
     function nextCustomCueIndex(phase) {
-      return nextAvailableCustomCueIndex(phase, editorState.cues);
+      return nextAvailableCustomCueIndex(phase, editorTimelineVariant(phase), editorState.cues);
     }
 
     function addEditorCue(text) {
@@ -3895,6 +4024,7 @@
       }
       const cue = {
         phase: editorState.phase,
+        timeline_variant: editorTimelineVariant(),
         cue_index: nextCustomCueIndex(editorState.phase),
         text: normalized,
         start_s: startS,
@@ -4043,7 +4173,10 @@
 
       const generation = editorState.voiceGeneration;
       const due = editorState.cues
-        .filter((cue) => cue.enabled && !cue.deleted && !editorState.voicePlayedKeys.has(editorCueKey(cue)))
+        .filter((cue) => cue.enabled
+          && !cue.deleted
+          && cueMatchesEditorVariant(cue)
+          && !editorState.voicePlayedKeys.has(editorCueKey(cue)))
         .map((cue) => ({ cue, absoluteS: editorAbsolutePromptS(cue) }))
         .filter(({ absoluteS }) => Number.isFinite(absoluteS)
           && absoluteS >= previousS - 0.001
@@ -4075,7 +4208,10 @@
 
       let currentKey = "";
       const cues = editorState.cues
-        .filter((cue) => cue.phase === currentPhase && cue.enabled && !cue.deleted)
+        .filter((cue) => cue.phase === currentPhase
+          && cue.enabled
+          && !cue.deleted
+          && cueMatchesEditorVariant(cue))
         .map((cue) => ({ cue, absoluteS: editorAbsolutePromptS(cue) }))
         .filter((item) => Number.isFinite(item.absoluteS))
         .sort((a, b) => a.absoluteS - b.absoluteS || Number(a.cue.cue_index || 0) - Number(b.cue.cue_index || 0));
@@ -4141,15 +4277,12 @@
         const response = await fetch("/web-live-assets.json", { cache: "no-store" });
         data = await response.json();
         if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText);
+        expandTimelineVariants(data);
       }
       state.assets = data;
-      for (const phase of PHASE_ORDER) {
-        state.timelineByPhase[phase] = data.timeline
-          .filter((cue) => cue.enabled && !cue.deleted && cue.phase === phase)
-          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
-      }
+      rebuildTimelineByPhase();
       initializeEditorData(data, preserveAlignment);
-      els.topStatus.textContent = `模板 ${data.template_count}，語音 ${data.timeline_enabled_count} 句`;
+      els.topStatus.textContent = `模板 ${data.template_count}，語音 ${selectedTimelineCueCount()} 句`;
     }
 
     async function saveEditorChanges() {
@@ -4159,6 +4292,7 @@
         const cue = editorCueByKey(key);
         return {
           phase: cue.phase,
+          timeline_variant: cueTimelineVariant(cue),
           cue_index: cue.cue_index,
           text: cue.text,
           start_s: Number(cue.start_s || 0),
@@ -4177,7 +4311,9 @@
             stored = JSON.parse(localStorage.getItem(STATIC_TIMELINE_KEY) || "{}") || {};
           } catch (_) {}
           for (const change of changes) {
-            if (!change.custom) stored[`${change.phase}:${change.cue_index}`] = change;
+            if (!change.custom) {
+              stored[`${change.phase}:${change.timeline_variant}:${change.cue_index}`] = change;
+            }
           }
           localStorage.setItem(STATIC_TIMELINE_KEY, JSON.stringify(stored));
           const customCues = editorState.cues
@@ -4235,6 +4371,7 @@
         changes.push({
           operation: cue.deleted ? "delete" : "update",
           phase: base.phase,
+          timeline_variant: cueTimelineVariant(base),
           cue_index: Number(base.cue_index),
           original_text: String(base.text || ""),
           text,
@@ -4250,6 +4387,7 @@
         changes.push({
           operation: "add",
           phase: cue.phase,
+          timeline_variant: cueTimelineVariant(cue),
           cue_index: Number(cue.cue_index),
           original_text: "",
           text: String(cue.text || ""),
@@ -4261,7 +4399,9 @@
           enabled: Boolean(cue.enabled),
         });
       }
-      return changes.sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase) || a.cue_index - b.cue_index);
+      return changes.sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase)
+        || String(a.timeline_variant).localeCompare(String(b.timeline_variant))
+        || a.cue_index - b.cue_index);
     }
 
     function updateFeedbackButton() {
@@ -4280,7 +4420,11 @@
       }
       els.feedbackReporter.value = localStorage.getItem(FEEDBACK_REPORTER_KEY) || "";
       els.feedbackNote.value = "";
-      els.feedbackSummary.textContent = `${changes.length} 則招式調整`;
+      const p1Variants = [...new Set(changes
+        .filter((change) => change.phase === "P1")
+        .map((change) => timelineVariantLabel(change.timeline_variant)))];
+      const variantSummary = p1Variants.length ? ` · P1 ${p1Variants.join("、")}` : "";
+      els.feedbackSummary.textContent = `${changes.length} 則招式調整${variantSummary}`;
       els.feedbackStatus.textContent = "";
       els.feedbackDialog.showModal();
     }
@@ -4306,6 +4450,7 @@
             note: String(els.feedbackNote.value || "").trim(),
             video_name: editorState.sourceName,
             video_duration_s: editorDuration(),
+            p1_variant: editorTimelineVariant("P1"),
             phase_anchors: phaseAnchors,
             changes,
           }),
@@ -4325,6 +4470,62 @@
       }
     }
 
+    function syncActiveP1Timeline() {
+      if (state.activePhase !== "P1") return;
+      const elapsed = Math.max(0, (performance.now() - state.phaseStartMs) / 1000);
+      for (const key of [...state.playedKeys]) {
+        if (key.startsWith("P1:")) state.playedKeys.delete(key);
+      }
+      state.activeCues = [...(state.timelineByPhase.P1 || [])]
+        .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
+      state.cueIndex = 0;
+      while (state.cueIndex < state.activeCues.length
+          && effectiveScheduledS(state.activeCues[state.cueIndex]) <= elapsed + 0.03) {
+        state.playedKeys.add(cueKey(state.activeCues[state.cueIndex]));
+        state.cueIndex += 1;
+      }
+      state.currentCue = null;
+      state.currentCueUntilMs = 0;
+      const label = phaseDisplayLabel("P1");
+      setText("phase", label, "ok");
+      setText("status", `${label} 計時中`, "ok");
+      updateNextCallout(performance.now());
+      renderTimeline();
+    }
+
+    function setP1Variant(hasShia) {
+      const nextValue = Boolean(hasShia);
+      const changed = state.p1HasShia !== nextValue || editorState.p1HasShia !== nextValue;
+      const previousCue = editorCueByKey(editorState.selectedKey);
+      state.p1HasShia = nextValue;
+      editorState.p1HasShia = nextValue;
+      els.p1ShiaInput.checked = nextValue;
+      els.editorP1ShiaInput.checked = nextValue;
+      localStorage.setItem(P1_VARIANT_KEY, String(nextValue));
+      rebuildTimelineByPhase();
+      if (changed) {
+        syncActiveP1Timeline();
+        if (!state.activePhase && expectedPhase() === "P1") {
+          setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
+        }
+        if (editorState.phase === "P1") {
+          const desiredKey = previousCue?.phase === "P1"
+            ? `P1:${editorTimelineVariant("P1")}:${previousCue.cue_index}`
+            : "";
+          const desiredCue = desiredKey ? editorCueByKey(desiredKey) : null;
+          const firstCue = editorPhaseCues()[0];
+          editorState.selectedKey = desiredCue ? desiredKey : firstCue ? editorCueKey(firstCue) : "";
+          editorState.playbackCueKey = "";
+          editorState.playbackPhase = "P1";
+          resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
+        }
+      }
+      renderPhaseCards();
+      renderTimeline();
+      renderEditor();
+      updatePrompter(performance.now());
+    }
+
     function applySettings() {
       const wasMuted = state.audioMuted;
       state.extraLeadS = Number(els.leadInput.value || 0);
@@ -4338,10 +4539,7 @@
       localStorage.setItem("blackMageWeb2Threshold", state.threshold.toFixed(2));
       localStorage.setItem("blackMageWeb2Volume", state.volume.toFixed(2));
       localStorage.setItem("blackMageWeb2Muted", String(state.audioMuted));
-      for (const phase of PHASE_ORDER) {
-        state.timelineByPhase[phase] = [...(state.timelineByPhase[phase] || [])]
-          .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
-      }
+      rebuildTimelineByPhase();
       if (state.activePhase) {
         state.activeCues = [...(state.timelineByPhase[state.activePhase] || [])]
           .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
@@ -4366,6 +4564,8 @@
       els.thresholdInput.addEventListener("change", applySettings);
       els.volumeInput.addEventListener("input", applySettings);
       els.muteInput.addEventListener("change", applySettings);
+      els.p1ShiaInput.addEventListener("change", () => setP1Variant(els.p1ShiaInput.checked));
+      els.editorP1ShiaInput.addEventListener("change", () => setP1Variant(els.editorP1ShiaInput.checked));
       els.editorBaselineBtn.addEventListener("click", loadEditorBaseline);
       els.editorYoutubeBtn.addEventListener("click", () => {
         loadEditorYoutubeFromUserAction(els.editorYoutubeInput.value).catch((error) => {
