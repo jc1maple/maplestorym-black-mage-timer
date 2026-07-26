@@ -580,6 +580,42 @@
     }
     .railPlayhead:hover::after,
     .editorRailViewport.seeking .railPlayhead::after { left: 5px; width: 4px; }
+    .railPlayheadTime {
+      position: absolute;
+      top: 11px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 5px 7px;
+      border: 1px solid #ff7a7a;
+      border-radius: 4px;
+      background: #15191f;
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .55);
+      font-size: 12px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .1s ease;
+      z-index: 2;
+    }
+    .railPlayhead:hover .railPlayheadTime,
+    .editorRailViewport.seeking .railPlayheadTime {
+      opacity: 1;
+      visibility: visible;
+    }
+    .railPlayhead.tooltipStart .railPlayheadTime {
+      left: 7px;
+      transform: none;
+    }
+    .railPlayhead.tooltipEnd .railPlayheadTime {
+      right: 7px;
+      left: auto;
+      transform: none;
+    }
     .editorFilter { width: 100%; margin-bottom: 8px; }
     .editorTableWrap { height: 430px; overflow: auto; border: 1px solid #303741; border-radius: 6px; background: #090b0e; }
     .editorCueRow {
@@ -4481,7 +4517,7 @@
         return `<button class="railCue ${selected} ${primary} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px" title="${escapeHtml(`拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}" aria-label="拖曳調整 ${escapeHtml(cue.text || "")}" aria-pressed="${selected ? "true" : "false"}"></button>`;
       });
       els.editorRail.style.width = `${editorState.railWidth}px`;
-      els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead" title="拖曳目前時間"></span>`;
+      els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead" title="目前時間 00:00.000 · 拖曳可調整" aria-label="拖曳目前時間 00:00.000"><span class="railPlayheadTime" aria-hidden="true">00:00.000</span></span>`;
     }
 
     function beginEditorRailDrag(event) {
@@ -4587,6 +4623,25 @@
       event.preventDefault();
     }
 
+    function updateEditorRailPlayhead(playhead, railX, phaseS, visible = true) {
+      if (!playhead) return;
+      const clampedX = Math.max(0, Math.min(editorState.railWidth, railX));
+      const label = fmt(Math.max(0, Number(phaseS) || 0));
+      playhead.style.left = `${clampedX}px`;
+      playhead.style.display = visible ? "block" : "none";
+      playhead.title = `目前時間 ${label} · 拖曳可調整`;
+      playhead.setAttribute("aria-label", `拖曳目前時間 ${label}`);
+      const timeLabel = playhead.querySelector(".railPlayheadTime");
+      if (timeLabel) timeLabel.textContent = label;
+
+      const viewportStart = els.editorRailViewport.scrollLeft;
+      const viewportEnd = viewportStart + els.editorRailViewport.clientWidth;
+      const nearStart = clampedX - viewportStart < 72;
+      const nearEnd = viewportEnd - clampedX < 72;
+      playhead.classList.toggle("tooltipStart", nearStart && !nearEnd);
+      playhead.classList.toggle("tooltipEnd", nearEnd && !nearStart);
+    }
+
     function seekEditorRailAt(clientX, seekVideo = true) {
       const rect = els.editorRail.getBoundingClientRect();
       const railX = Math.max(0, Math.min(editorState.railWidth, clientX - rect.left));
@@ -4594,10 +4649,7 @@
       const targetS = editorHudTime() + phaseS;
       if (seekVideo) seekEditorVideo(targetS);
       const playhead = document.getElementById("editorRailPlayhead");
-      if (playhead) {
-        playhead.style.left = `${railX}px`;
-        playhead.style.display = "block";
-      }
+      updateEditorRailPlayhead(playhead, railX, phaseS);
       els.editorVideoTime.textContent = fmt(targetS);
       updateEditorPlaybackHighlight(targetS);
     }
@@ -5046,8 +5098,12 @@
       const playhead = document.getElementById("editorRailPlayhead");
       if (!playhead) return;
       const relative = currentS - editorHudTime();
-      playhead.style.left = `${Math.max(0, Math.min(editorState.railWidth, relative * EDITOR_RAIL_PX_PER_SECOND))}px`;
-      playhead.style.display = relative >= 0 ? "block" : "none";
+      updateEditorRailPlayhead(
+        playhead,
+        relative * EDITOR_RAIL_PX_PER_SECOND,
+        relative,
+        relative >= 0,
+      );
     }
 
     async function refreshTimelineFromServer(preserveAlignment = true) {
