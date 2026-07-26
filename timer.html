@@ -461,7 +461,15 @@
       cursor: ew-resize;
       touch-action: none;
     }
-    .railCue.selected { width: 15px; transform: translateX(-7px); background: #ffd166; border-color: #fff; }
+    .railCue.selected {
+      width: 15px;
+      transform: translateX(-7px);
+      background: #2795b8;
+      border-color: #b8efff;
+      box-shadow: 0 0 0 2px #155b73;
+      z-index: 2;
+    }
+    .railCue.selected.primarySelection { background: #ffd166; border-color: #fff; box-shadow: 0 0 0 2px #8d6a00; z-index: 3; }
     .railCue.dragging {
       width: 17px;
       transform: translateX(-8px);
@@ -481,7 +489,8 @@
       box-shadow: 0 0 0 2px #14773a, 0 0 14px rgba(86, 233, 139, 0.85);
       z-index: 3;
     }
-    .railCue.playing.selected { box-shadow: 0 0 0 2px #ffd166, 0 0 14px rgba(86, 233, 139, 0.85); }
+    .railCue.playing.selected { box-shadow: 0 0 0 2px #6dd5ff, 0 0 14px rgba(86, 233, 139, 0.85); }
+    .railCue.playing.selected.primarySelection { box-shadow: 0 0 0 2px #ffd166, 0 0 14px rgba(86, 233, 139, 0.85); }
     .railPlayhead {
       position: absolute;
       top: 0;
@@ -531,7 +540,8 @@
       min-height: 42px;
     }
     .editorCueRow:hover { background: #171c23; }
-    .editorCueRow.selected { color: #111; background: #ffd166; }
+    .editorCueRow.selected { color: #eefbff; background: #214d62; box-shadow: inset 5px 0 #6dd5ff; }
+    .editorCueRow.selected.primarySelection { color: #111; background: #ffd166; box-shadow: inset 5px 0 #fff; }
     .editorCueRow.playing {
       color: #061109;
       background: #56e98b;
@@ -539,7 +549,8 @@
       font-weight: 800;
     }
     .editorCueRow.playing:hover { background: #6df09b; }
-    .editorCueRow.playing.selected { outline: 2px solid #ffd166; outline-offset: -2px; }
+    .editorCueRow.playing.selected { outline: 2px solid #6dd5ff; outline-offset: -2px; }
+    .editorCueRow.playing.selected.primarySelection { outline-color: #ffd166; }
     .editorCueRow.dirty:not(.selected):not(.playing) { border-left: 4px solid #ffd166; }
     .editorCueRow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .editorCueRow .disabledCue { color: var(--bad); }
@@ -834,6 +845,7 @@
       originalByKey: new Map(),
       dirtyKeys: new Set(),
       selectedKey: "",
+      selectedKeys: new Set(),
       hudTimes: {},
       sourceName: "",
       sourceMode: "",
@@ -2615,6 +2627,48 @@
       return editorState.cues.find((cue) => editorCueKey(cue) === key) || null;
     }
 
+    function replaceEditorSelection(key = "") {
+      editorState.selectedKey = key;
+      editorState.selectedKeys = new Set(key ? [key] : []);
+    }
+
+    function normalizeEditorSelection() {
+      const validKeys = new Set(editorPhaseCues().map((cue) => editorCueKey(cue)));
+      editorState.selectedKeys = new Set(
+        [...editorState.selectedKeys].filter((key) => validKeys.has(key)),
+      );
+      if (!editorState.selectedKeys.has(editorState.selectedKey)) {
+        editorState.selectedKey = [...editorState.selectedKeys][0] || "";
+      }
+      if (editorState.selectedKey && !editorState.selectedKeys.size) {
+        editorState.selectedKeys.add(editorState.selectedKey);
+      }
+    }
+
+    function selectedEditorCues() {
+      normalizeEditorSelection();
+      return editorPhaseCues().filter((cue) => editorState.selectedKeys.has(editorCueKey(cue)));
+    }
+
+    function toggleEditorCueSelection(key) {
+      const cue = editorCueByKey(key);
+      if (!cue || cue.phase !== editorState.phase || cueTimelineVariant(cue) !== editorTimelineVariant()) return;
+      if (editorState.selectedKeys.has(key)) {
+        editorState.selectedKeys.delete(key);
+        if (editorState.selectedKey === key) {
+          const next = editorPhaseCues().find((item) => editorState.selectedKeys.has(editorCueKey(item)));
+          editorState.selectedKey = next ? editorCueKey(next) : "";
+        }
+      } else {
+        editorState.selectedKeys.add(key);
+        editorState.selectedKey = key;
+      }
+    }
+
+    function multiSelectModifier(event) {
+      return Boolean(event.ctrlKey || event.metaKey);
+    }
+
     function editorPhaseCues() {
       return editorState.cues
         .filter((cue) => cue.phase === editorState.phase
@@ -2654,7 +2708,7 @@
         }
       }
       const previousCue = editorCueByKey(previousSelected);
-      editorState.selectedKey = previousCue
+      const selectedKey = previousCue
           && previousCue.phase === editorState.phase
           && cueTimelineVariant(previousCue) === editorTimelineVariant()
         ? previousSelected
@@ -2663,6 +2717,7 @@
           timeline_variant: editorTimelineVariant(),
           cue_index: 0,
         });
+      replaceEditorSelection(selectedKey);
       renderEditor();
     }
 
@@ -3663,7 +3718,7 @@
       updateFeedbackButton();
     }
 
-    function markEditorDirty(cue) {
+    function markEditorDirty(cue, refresh = true) {
       const key = editorCueKey(cue);
       const original = editorState.originalByKey.get(key);
       const changed = !original
@@ -3676,11 +3731,28 @@
       else editorState.dirtyKeys.delete(key);
       cue.scheduled_s = editorScheduledS(cue);
       editorState.voicePlayedKeys.delete(editorCueKey(cue));
+      if (refresh) updateEditorSaveStatus();
+    }
+
+    function shiftEditorCueGroup(cues, requestedDeltaS) {
+      if (!cues.length) return 0;
+      const minStartS = Math.min(...cues.map((cue) => Number(cue.start_s || 0)));
+      const deltaS = Math.max(-minStartS, Number(requestedDeltaS || 0));
+      for (const cue of cues) {
+        const oldStartS = Number(cue.start_s || 0);
+        const durationS = Math.max(0, Number(cue.end_s ?? oldStartS) - oldStartS);
+        cue.start_s = Math.max(0, Math.round((oldStartS + deltaS) * 1000) / 1000);
+        cue.end_s = cue.start_s + durationS;
+        markEditorDirty(cue, false);
+      }
       updateEditorSaveStatus();
+      return deltaS;
     }
 
     function renderEditorSelected() {
+      normalizeEditorSelection();
       const cue = editorCueByKey(editorState.selectedKey);
+      const selectedCount = editorState.selectedKeys.size;
       const controls = [els.editorTextInput, els.editorStartInput, els.editorLeadInput, els.editorPromptInput, els.editorEnabledInput, els.editorSetCueBtn, els.editorJumpCueBtn, els.editorPreviewCueBtn, els.editorDeleteCueBtn];
       const nudgeButtons = [...document.querySelectorAll("[data-editor-nudge]")];
       if (!cue) {
@@ -3692,7 +3764,9 @@
         els.editorTextInput.value = "";
         return;
       }
-      els.editorSelectedName.textContent = `${cue.phase}#${cue.cue_index} ${cue.text}`;
+      els.editorSelectedName.textContent = selectedCount > 1
+        ? `已選 ${selectedCount} 招 · ${cue.phase}#${cue.cue_index} ${cue.text}`
+        : `${cue.phase}#${cue.cue_index} ${cue.text}`;
       els.editorTextInput.value = String(cue.text || "");
       els.editorStartInput.value = Number(cue.start_s || 0).toFixed(3);
       els.editorLeadInput.value = Number(cue.lead_s || 0).toFixed(3);
@@ -3720,15 +3794,17 @@
     }
 
     function renderEditorTable() {
+      normalizeEditorSelection();
       const query = String(els.editorFilter.value || "").trim().toLocaleLowerCase("zh-TW");
       const rows = editorPhaseCues().filter((cue) => !query || String(cue.text || "").toLocaleLowerCase("zh-TW").includes(query));
       els.editorTable.innerHTML = rows.map((cue) => {
         const key = editorCueKey(cue);
-        const selected = key === editorState.selectedKey ? "selected" : "";
+        const selected = editorState.selectedKeys.has(key) ? "selected" : "";
+        const primary = key === editorState.selectedKey ? "primarySelection" : "";
         const playing = key === editorState.playbackCueKey ? "playing" : "";
         const dirty = editorState.dirtyKeys.has(key) ? "dirty" : "";
         const enabled = cue.enabled ? "" : "disabledCue";
-        return `<button class="editorCueRow ${selected} ${playing} ${dirty}" data-editor-key="${escapeHtml(key)}" aria-current="${playing ? "true" : "false"}">
+        return `<button class="editorCueRow ${selected} ${primary} ${playing} ${dirty}" data-editor-key="${escapeHtml(key)}" aria-current="${playing ? "true" : "false"}" aria-pressed="${selected ? "true" : "false"}">
           <span>${cue.phase}#${cue.cue_index}</span>
           <span>${fmt(Number(cue.start_s || 0))}</span>
           <span class="promptCol">${fmt(editorScheduledS(cue))}</span>
@@ -3739,6 +3815,7 @@
     }
 
     function renderEditorRail() {
+      normalizeEditorSelection();
       const cues = editorPhaseCues();
       const duration = Math.max(90, ...cues.map((cue) => editorScheduledS(cue) + 12));
       editorState.railWidth = Math.max(900, Math.ceil(duration * EDITOR_RAIL_PX_PER_SECOND));
@@ -3748,10 +3825,11 @@
       }
       const markers = cues.map((cue) => {
         const key = editorCueKey(cue);
-        const selected = key === editorState.selectedKey ? "selected" : "";
+        const selected = editorState.selectedKeys.has(key) ? "selected" : "";
+        const primary = key === editorState.selectedKey ? "primarySelection" : "";
         const playing = key === editorState.playbackCueKey ? "playing" : "";
         const scheduledS = editorScheduledS(cue);
-        return `<button class="railCue ${selected} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px" title="${escapeHtml(`拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}" aria-label="拖曳調整 ${escapeHtml(cue.text || "")}"></button>`;
+        return `<button class="railCue ${selected} ${primary} ${playing}" data-editor-key="${escapeHtml(key)}" style="left:${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px" title="${escapeHtml(`拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(Number(cue.start_s || 0))} · ${cue.text}`)}" aria-label="拖曳調整 ${escapeHtml(cue.text || "")}" aria-pressed="${selected ? "true" : "false"}"></button>`;
       });
       els.editorRail.style.width = `${editorState.railWidth}px`;
       els.editorRail.innerHTML = `${ticks.join("")}${markers.join("")}<span id="editorRailPlayhead" class="railPlayhead" title="拖曳目前時間"></span>`;
@@ -3761,23 +3839,42 @@
       if (event.button !== 0) return;
       const marker = event.target.closest(".railCue[data-editor-key]");
       if (!marker) return;
+      if (multiSelectModifier(event)) return;
       const cue = editorCueByKey(marker.dataset.editorKey);
       if (!cue) return;
       editorPause();
       editorState.phase = cue.phase;
-      editorState.selectedKey = editorCueKey(cue);
+      const key = editorCueKey(cue);
+      if (!editorState.selectedKeys.has(key)) replaceEditorSelection(key);
+      else editorState.selectedKey = key;
+      const cues = selectedEditorCues();
+      const items = cues.map((itemCue) => {
+        const itemKey = editorCueKey(itemCue);
+        const itemMarker = els.editorRail.querySelector(`[data-editor-key="${CSS.escape(itemKey)}"]`);
+        const originalStartS = Number(itemCue.start_s || 0);
+        return {
+          cue: itemCue,
+          marker: itemMarker,
+          originalStartS,
+          durationS: Math.max(0, Number(itemCue.end_s ?? originalStartS) - originalStartS),
+        };
+      });
       editorState.railDrag = {
         cue,
         marker,
+        items,
         pointerId: event.pointerId,
         startClientX: event.clientX,
-        originalStartS: Number(cue.start_s || 0),
-        durationS: Math.max(0, Number(cue.end_s ?? cue.start_s ?? 0) - Number(cue.start_s || 0)),
+        minOriginalStartS: Math.min(...items.map((item) => item.originalStartS)),
         moved: false,
       };
       marker.setPointerCapture?.(event.pointerId);
-      for (const item of els.editorRail.querySelectorAll(".railCue.selected")) item.classList.remove("selected");
-      marker.classList.add("selected");
+      for (const itemMarker of els.editorRail.querySelectorAll(".railCue[data-editor-key]")) {
+        const selected = editorState.selectedKeys.has(itemMarker.dataset.editorKey);
+        itemMarker.classList.toggle("selected", selected);
+        itemMarker.classList.toggle("primarySelection", itemMarker.dataset.editorKey === key);
+        itemMarker.setAttribute("aria-pressed", String(selected));
+      }
       renderEditorSelected();
       renderEditorTable();
       event.preventDefault();
@@ -3789,18 +3886,30 @@
       const deltaPx = event.clientX - drag.startClientX;
       if (!drag.moved && Math.abs(deltaPx) < 3) return;
       drag.moved = true;
-      drag.marker.classList.add("dragging");
       els.editorRailViewport.classList.add("dragging");
-      const deltaS = deltaPx / EDITOR_RAIL_PX_PER_SECOND;
-      const nextStartS = Math.max(0, Math.round((drag.originalStartS + deltaS) * 10) / 10);
-      drag.cue.start_s = nextStartS;
-      drag.cue.end_s = nextStartS + drag.durationS;
-      markEditorDirty(drag.cue);
-      const scheduledS = editorScheduledS(drag.cue);
-      drag.marker.style.left = `${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px`;
-      drag.marker.title = `拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(nextStartS)} · ${drag.cue.text}`;
+      const requestedDeltaS = Math.round((deltaPx / EDITOR_RAIL_PX_PER_SECOND) * 10) / 10;
+      const deltaS = Math.max(-drag.minOriginalStartS, requestedDeltaS);
+      for (const item of drag.items) {
+        const nextStartS = Math.max(0, Math.round((item.originalStartS + deltaS) * 1000) / 1000);
+        item.cue.start_s = nextStartS;
+        item.cue.end_s = nextStartS + item.durationS;
+        markEditorDirty(item.cue, false);
+        if (item.marker) {
+          const scheduledS = editorScheduledS(item.cue);
+          item.marker.classList.add("dragging");
+          item.marker.style.left = `${scheduledS * EDITOR_RAIL_PX_PER_SECOND}px`;
+          item.marker.title = `拖曳調整 · 提示 ${fmt(scheduledS)} · 招式 ${fmt(nextStartS)} · ${item.cue.text}`;
+        }
+      }
+      updateEditorSaveStatus();
       renderEditorSelected();
-      setEditorStatus(`${drag.cue.phase}#${drag.cue.cue_index} 調整到 ${fmt(nextStartS)}`, "dirty");
+      const primaryStartS = Number(drag.cue.start_s || 0);
+      setEditorStatus(
+        drag.items.length > 1
+          ? `${drag.items.length} 招一起調整 ${deltaS >= 0 ? "+" : ""}${deltaS.toFixed(1)} 秒`
+          : `${drag.cue.phase}#${drag.cue.cue_index} 調整到 ${fmt(primaryStartS)}`,
+        "dirty",
+      );
       event.preventDefault();
     }
 
@@ -3813,9 +3922,12 @@
       if (!drag.moved) return;
       const canceled = event.type === "pointercancel";
       if (canceled) {
-        drag.cue.start_s = drag.originalStartS;
-        drag.cue.end_s = drag.originalStartS + drag.durationS;
-        markEditorDirty(drag.cue);
+        for (const item of drag.items) {
+          item.cue.start_s = item.originalStartS;
+          item.cue.end_s = item.originalStartS + item.durationS;
+          markEditorDirty(item.cue, false);
+        }
+        updateEditorSaveStatus();
       }
       editorState.suppressRailClick = true;
       renderEditorRail();
@@ -3938,18 +4050,23 @@
       editorPlay().catch((error) => setEditorStatus(`無法播放：${error.message}`, "dirty"));
     }
 
-    function selectEditorCue(key, seek = true) {
+    function selectEditorCue(key, seek = true, additive = false) {
       const cue = editorCueByKey(key);
       if (!cue) return;
       editorState.phase = cue.phase;
-      editorState.selectedKey = key;
+      if (additive) {
+        toggleEditorCueSelection(key);
+        seek = false;
+      } else {
+        replaceEditorSelection(key);
+      }
       if (seek) {
         editorState.playbackCueKey = key;
         editorState.playbackPhase = cue.phase;
       }
       renderEditor();
       if (seek) playEditorCueFromPrompt(cue);
-      scrollEditorCueIntoView(key);
+      if (editorState.selectedKeys.has(key)) scrollEditorCueIntoView(key);
     }
 
     function selectEditorPhase(phase) {
@@ -3962,7 +4079,7 @@
           || current.phase !== phase
           || cueTimelineVariant(current) !== editorTimelineVariant(phase)) {
         const first = editorPhaseCues()[0];
-        editorState.selectedKey = first ? editorCueKey(first) : "";
+        replaceEditorSelection(first ? editorCueKey(first) : "");
       }
       editorState.playbackCueKey = "";
       editorState.playbackPhase = phase;
@@ -4043,7 +4160,7 @@
       editorState.cues.push(cue);
       editorState.customSkillTexts.add(normalized);
       saveCustomSkillLibrary();
-      editorState.selectedKey = editorCueKey(cue);
+      replaceEditorSelection(editorCueKey(cue));
       markEditorDirty(cue);
       els.editorNewSkillInput.value = "";
       renderEditor();
@@ -4055,8 +4172,12 @@
       cue.deleted = true;
       cue.enabled = false;
       markEditorDirty(cue);
-      const next = editorPhaseCues()[0];
-      editorState.selectedKey = next ? editorCueKey(next) : "";
+      editorState.selectedKeys.delete(editorCueKey(cue));
+      normalizeEditorSelection();
+      if (!editorState.selectedKey) {
+        const next = editorPhaseCues()[0];
+        replaceEditorSelection(next ? editorCueKey(next) : "");
+      }
       resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
       renderEditor();
     }
@@ -4071,9 +4192,19 @@
     }
 
     function nudgeSelectedEditorCue(deltaS) {
-      const cue = editorCueByKey(editorState.selectedKey);
-      if (!cue) return;
-      updateSelectedEditorCue({ startS: Number(cue.start_s || 0) + Number(deltaS || 0) });
+      const cues = selectedEditorCues();
+      const cue = editorCueByKey(editorState.selectedKey) || cues[0];
+      if (!cue || !cues.length) return;
+      const appliedDeltaS = shiftEditorCueGroup(cues, Number(deltaS || 0));
+      renderEditorSelected();
+      renderEditorRail();
+      renderEditorTable();
+      setEditorStatus(
+        cues.length > 1
+          ? `${cues.length} 招一起調整 ${appliedDeltaS >= 0 ? "+" : ""}${appliedDeltaS.toFixed(1)} 秒`
+          : `${cue.phase}#${cue.cue_index} 調整到 ${fmt(Number(cue.start_s || 0))}`,
+        "dirty",
+      );
       seekEditorVideo(editorHudTime() + Number(cue.start_s || 0));
     }
 
@@ -4234,10 +4365,10 @@
       editorState.playbackPhase = position.phase;
       if (followPhase) {
         editorState.phase = position.phase;
-        if (position.key) editorState.selectedKey = position.key;
+        if (position.key) replaceEditorSelection(position.key);
         else {
           const first = editorPhaseCues()[0];
-          editorState.selectedKey = first ? editorCueKey(first) : "";
+          replaceEditorSelection(first ? editorCueKey(first) : "");
         }
         renderEditor();
       } else {
@@ -4514,7 +4645,7 @@
             : "";
           const desiredCue = desiredKey ? editorCueByKey(desiredKey) : null;
           const firstCue = editorPhaseCues()[0];
-          editorState.selectedKey = desiredCue ? desiredKey : firstCue ? editorCueKey(firstCue) : "";
+          replaceEditorSelection(desiredCue ? desiredKey : firstCue ? editorCueKey(firstCue) : "");
           editorState.playbackCueKey = "";
           editorState.playbackPhase = "P1";
           resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
@@ -4636,7 +4767,10 @@
       });
       els.editorTable.addEventListener("click", (event) => {
         const row = event.target.closest("[data-editor-key]");
-        if (row) selectEditorCue(row.dataset.editorKey);
+        if (row) {
+          const additive = multiSelectModifier(event);
+          selectEditorCue(row.dataset.editorKey, !additive, additive);
+        }
       });
       els.editorRail.addEventListener("pointerdown", beginEditorRailDrag);
       els.editorRail.addEventListener("pointerdown", beginEditorRailSeek);
@@ -4654,7 +4788,8 @@
         if (event.target.closest(".railPlayhead")) return;
         const marker = event.target.closest("[data-editor-key]");
         if (marker) {
-          selectEditorCue(marker.dataset.editorKey);
+          const additive = multiSelectModifier(event);
+          selectEditorCue(marker.dataset.editorKey, !additive, additive);
           return;
         }
         seekEditorRailAt(event.clientX);
