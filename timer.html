@@ -48,6 +48,7 @@
       position: sticky;
       top: 0;
       z-index: 2;
+      transition: margin-left .18s ease;
     }
     h1 { font-size: 20px; margin: 0 12px 0 0; }
     main {
@@ -55,6 +56,62 @@
       grid-template-columns: minmax(480px, 1.15fr) minmax(360px, .85fr);
       gap: 12px;
       padding: 12px;
+      transition: margin-left .18s ease;
+    }
+    .iconButton {
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      font-size: 23px;
+      line-height: 1;
+    }
+    .bossSidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 12;
+      width: 224px;
+      padding: 14px 12px;
+      border-right: 1px solid var(--line);
+      background: #0b0e12;
+      transform: translateX(-100%);
+      transition: transform .18s ease;
+      overflow-y: auto;
+    }
+    body.boss-sidebar-open .bossSidebar { transform: translateX(0); }
+    body.boss-sidebar-open > header,
+    body.boss-sidebar-open > main { margin-left: 224px; }
+    .bossSidebarHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .bossSidebarHeader strong { font-size: 18px; }
+    .bossChoices { display: grid; gap: 7px; }
+    .bossChoice {
+      width: 100%;
+      min-height: 48px;
+      text-align: left;
+      font-weight: 800;
+      background: #171c23;
+    }
+    .bossChoice.active {
+      color: #07130b;
+      background: var(--ok);
+      border-color: #bdf4ca;
+    }
+    .bossBackdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 11;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      background: rgba(0, 0, 0, .62);
     }
     section {
       background: var(--panel);
@@ -123,7 +180,7 @@
     }
     .phaseGrid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 8px;
       margin: 8px 0 12px;
     }
@@ -171,7 +228,7 @@
     }
     .cueRow {
       display: grid;
-      grid-template-columns: 52px 64px 1fr;
+      grid-template-columns: 86px 64px 1fr;
       gap: 8px;
       padding: 6px 8px;
       border-bottom: 1px solid #222832;
@@ -528,7 +585,7 @@
     .editorCueRow {
       width: 100%;
       display: grid;
-      grid-template-columns: 64px 84px 84px minmax(0, 1fr) 36px;
+      grid-template-columns: 96px 84px 84px minmax(0, 1fr) 36px;
       gap: 7px;
       align-items: center;
       text-align: left;
@@ -567,6 +624,9 @@
       .editorTableWrap { height: 360px; }
       body.focus-prompter .prompterMove { font-size: 72px; }
       body.focus-prompter .prompterSeconds { font-size: 112px; }
+      body.boss-sidebar-open > header,
+      body.boss-sidebar-open > main { margin-left: 0; }
+      body.boss-sidebar-open .bossBackdrop { display: block; }
     }
     @media (max-width: 600px) {
       .prompterPanel { min-height: 340px; padding: 12px; }
@@ -582,8 +642,17 @@
   </style>
 </head>
 <body>
+  <aside id="bossSidebar" class="bossSidebar" aria-label="選擇王" aria-hidden="true">
+    <div class="bossSidebarHeader">
+      <strong>選擇王</strong>
+      <button id="bossMenuCloseBtn" class="iconButton" title="收起側邊欄" aria-label="收起側邊欄">×</button>
+    </div>
+    <nav id="bossChoices" class="bossChoices"></nav>
+  </aside>
+  <button id="bossBackdrop" class="bossBackdrop" aria-label="收起側邊欄"></button>
   <header>
-    <h1>黑魔法師招式提示機</h1>
+    <button id="bossMenuBtn" class="iconButton" title="選擇王" aria-label="選擇王">☰</button>
+    <h1><span id="bossTitle">黑魔法師</span>招式提示機</h1>
     <div class="modeSwitch" role="tablist" aria-label="工具模式">
       <button id="liveModeBtn" class="active" role="tab" aria-selected="true">實戰提詞</button>
       <button id="editorModeBtn" role="tab" aria-selected="false">時間軸編輯</button>
@@ -622,15 +691,11 @@
         <label>語音音量 <input id="volumeInput" type="range" min="0" max="100" step="5" value="100"></label>
         <span id="volumeText">100%</span>
         <label><input id="muteInput" type="checkbox"> 靜音</label>
-        <label class="p1VariantToggle"><input id="p1ShiaInput" type="checkbox" checked> P1 有施雅</label>
+        <label id="liveP1VariantToggle" class="p1VariantToggle"><input id="p1ShiaInput" type="checkbox" checked> P1 有施雅</label>
         <label>偵測門檻 <input id="thresholdInput" type="number" min="0.70" max="0.98" step="0.01" value="0.84"></label>
       </div>
-      <div class="manual">
+      <div id="manualPhaseButtons" class="manual">
         <span class="muted">手動起算：</span>
-        <button data-manual-phase="P1">P1</button>
-        <button data-manual-phase="P2">P2</button>
-        <button data-manual-phase="P3">P3</button>
-        <button data-manual-phase="P4">P4</button>
       </div>
     </section>
 
@@ -689,20 +754,15 @@
         <button data-editor-seek="1">+1s</button>
         <label class="editorVoiceToggle"><input id="editorVoiceInput" type="checkbox" checked> 提示語音</label>
       </div>
-      <div id="editorPhaseTabs" class="editorPhaseTabs" role="tablist" aria-label="編輯階段">
-        <button data-editor-phase="P1">P1</button>
-        <button data-editor-phase="P2">P2</button>
-        <button data-editor-phase="P3">P3</button>
-        <button data-editor-phase="P4">P4</button>
-      </div>
+      <div id="editorPhaseTabs" class="editorPhaseTabs" role="tablist" aria-label="編輯階段"></div>
       <div id="editorP1VariantRow" class="editorP1VariantRow">
         <label class="p1VariantToggle"><input id="editorP1ShiaInput" type="checkbox" checked> P1 有施雅</label>
       </div>
       <div class="phaseAlignment">
-        <label>HUD 影片時間 <input id="editorHudInput" type="number" min="0" step="0.001" value="0"></label>
+        <label>階段起算時間 <input id="editorHudInput" type="number" min="0" step="0.001" value="0"></label>
         <div class="editorToolbar">
           <button id="editorSetHudBtn">設為影片當下</button>
-          <button id="editorJumpHudBtn">跳到 HUD</button>
+          <button id="editorJumpHudBtn">跳到起算點</button>
         </div>
       </div>
       <div class="skillCreator">
@@ -769,7 +829,49 @@
   <canvas id="metricCanvas"></canvas>
 
   <script>
-    const PHASE_ORDER = ["P1", "P2", "P3", "P4"];
+    const BOSS_PROFILES = {
+      black_mage: {
+        id: "black_mage",
+        name: "黑魔法師",
+        detector: "black_mage",
+        phases: ["P1", "P2", "P3", "P4"],
+        phaseLabels: { P1: "P1", P2: "P2", P3: "P3", P4: "P4" },
+        defaultEditorYoutubeUrl: "https://youtu.be/UxH_aFs8aa0",
+        p1Variant: true,
+      },
+      seren: {
+        id: "seren",
+        name: "賽連",
+        detector: "seren",
+        phases: ["S_P1", "S_NOON", "S_SUNSET", "S_MIDNIGHT", "S_DAWN"],
+        phaseLabels: {
+          S_P1: "P1",
+          S_NOON: "P2 正午",
+          S_SUNSET: "P2 黃昏",
+          S_MIDNIGHT: "P2 午夜",
+          S_DAWN: "P2 黎明",
+        },
+        defaultEditorYoutubeUrl: "https://youtu.be/0gGq4G2oG7A",
+        p1Variant: false,
+        baselineReplay: {
+          name: "0gGq4G2oG7A - 韓服楓之谷m-賽蓮",
+          video_duration_s: 515.2,
+          phase_hints: {
+            S_P1: { gate_start_s: 6.967, template: "HUD 出現" },
+            S_NOON: { gate_start_s: 131.833, template: "正午轉輪啟動" },
+            S_SUNSET: { gate_start_s: 198.933, template: "全白轉場" },
+            S_MIDNIGHT: { gate_start_s: 273.333, template: "全白轉場" },
+            S_DAWN: { gate_start_s: 297.667, template: "全白轉場" },
+          },
+        },
+      },
+    };
+    const BOSS_STORAGE_KEY = "mapleBossTimerSelectedBoss";
+    const initialBossId = BOSS_PROFILES[localStorage.getItem(BOSS_STORAGE_KEY)]
+      ? localStorage.getItem(BOSS_STORAGE_KEY)
+      : "black_mage";
+    let PHASE_ORDER = [...BOSS_PROFILES[initialBossId].phases];
+    const ALL_PHASES = new Set(Object.values(BOSS_PROFILES).flatMap((profile) => profile.phases));
     const STATIC_DEPLOYMENT = true;
     const STATIC_ASSET_BASE_URL = new URL("./", window.location.href);
     const FEEDBACK_API_URL = "https://maplestorym-black-mage-timer.jrychang0621.chatgpt.site/api/timeline-feedback";
@@ -786,10 +888,10 @@
     const DEFAULT_TIMELINE_VARIANT = "default";
     const FEEDBACK_REPORTER_KEY = "blackMageWeb2FeedbackReporter";
     const EDITOR_YOUTUBE_KEY = "blackMageEditorYoutubeUrl";
-    const DEFAULT_EDITOR_YOUTUBE_URL = "https://youtu.be/UxH_aFs8aa0";
     const LEGACY_EDITOR_BASELINE_IDS = new Set(["-O4WH-sTv4w", "zeSCLSv7kxI", "eBPBE3YK_S4"]);
     const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
     const state = {
+      bossId: initialBossId,
       assets: null,
       baseTimeline: [],
       templatesByPhase: {},
@@ -834,13 +936,28 @@
         firstVisibleMs: 0,
         whiteCount: 0,
       },
+      visitedPhases: new Set(),
+      serenDetection: {
+        structureHiddenSinceMs: 0,
+        structureHiddenLastMs: 0,
+        visibleCount: 0,
+        firstVisibleMs: 0,
+        wheelCount: 0,
+        firstWheelMs: 0,
+        whiteCount: 0,
+        firstWhiteMs: 0,
+        whiteLastMs: 0,
+        whiteLatched: false,
+        lastTransitionMs: 0,
+      },
       lastScanTelemetryMs: 0,
       contentRectLock: null,
       lastWideSearchMs: 0,
       sessionId: `web2-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`,
     };
     const editorState = {
-      phase: "P1",
+      bossId: initialBossId,
+      phase: PHASE_ORDER[0],
       p1HasShia: true,
       cues: [],
       originalByKey: new Map(),
@@ -881,6 +998,34 @@
       suppressRailClick: false,
     };
 
+    function activeBossProfile() {
+      return BOSS_PROFILES[state.bossId] || BOSS_PROFILES.black_mage;
+    }
+
+    function bossIdForPhase(phase) {
+      return Object.values(BOSS_PROFILES).find((profile) => profile.phases.includes(phase))?.id || "black_mage";
+    }
+
+    function cueBossId(cue) {
+      return String(cue?.boss_id || bossIdForPhase(String(cue?.phase || "")));
+    }
+
+    function activeBaselineReplay() {
+      return activeBossProfile().baselineReplay || state.assets?.baseline_replay || null;
+    }
+
+    function defaultEditorYoutubeUrl() {
+      return activeBossProfile().defaultEditorYoutubeUrl;
+    }
+
+    function editorYoutubeStorageKey(bossId = state.bossId) {
+      return bossId === "black_mage" ? EDITOR_YOUTUBE_KEY : `${EDITOR_YOUTUBE_KEY}:${bossId}`;
+    }
+
+    function appTitle() {
+      return `${activeBossProfile().name}招式提示機`;
+    }
+
     function normalizeTimelineVariant(phase, value) {
       if (phase !== "P1") return DEFAULT_TIMELINE_VARIANT;
       return value === P1_VARIANT_NO_SHIA ? P1_VARIANT_NO_SHIA : P1_VARIANT_SHIA;
@@ -895,11 +1040,15 @@
     }
 
     function liveTimelineVariant(phase) {
-      return phase === "P1" ? selectedP1Variant(state.p1HasShia) : DEFAULT_TIMELINE_VARIANT;
+      return state.bossId === "black_mage" && phase === "P1"
+        ? selectedP1Variant(state.p1HasShia)
+        : DEFAULT_TIMELINE_VARIANT;
     }
 
     function editorTimelineVariant(phase = editorState.phase) {
-      return phase === "P1" ? selectedP1Variant(editorState.p1HasShia) : DEFAULT_TIMELINE_VARIANT;
+      return editorState.bossId === "black_mage" && phase === "P1"
+        ? selectedP1Variant(editorState.p1HasShia)
+        : DEFAULT_TIMELINE_VARIANT;
     }
 
     function timelineVariantLabel(variant) {
@@ -907,7 +1056,11 @@
     }
 
     function phaseDisplayLabel(phase, variant = liveTimelineVariant(phase)) {
-      return phase === "P1" ? `P1 ${timelineVariantLabel(variant)}` : phase;
+      const profile = Object.values(BOSS_PROFILES).find((item) => item.phases.includes(phase));
+      const label = profile?.phaseLabels?.[phase] || phase;
+      return profile?.id === "black_mage" && phase === "P1"
+        ? `${label} ${timelineVariantLabel(variant)}`
+        : label;
     }
 
     function timelineCueKey(cue) {
@@ -920,12 +1073,18 @@
       for (const cue of data.timeline) {
         const phase = String(cue.phase || "");
         const rawVariant = String(cue.timeline_variant || "");
-        if (phase === "P1" && rawVariant !== P1_VARIANT_SHIA && rawVariant !== P1_VARIANT_NO_SHIA) {
-          expanded.push({ ...cue, timeline_variant: P1_VARIANT_SHIA });
-          expanded.push({ ...cue, timeline_variant: P1_VARIANT_NO_SHIA });
+        const bossId = String(cue.boss_id || bossIdForPhase(phase));
+        if (bossId === "black_mage" && phase === "P1"
+            && rawVariant !== P1_VARIANT_SHIA && rawVariant !== P1_VARIANT_NO_SHIA) {
+          expanded.push({ ...cue, boss_id: bossId, timeline_variant: P1_VARIANT_SHIA });
+          expanded.push({ ...cue, boss_id: bossId, timeline_variant: P1_VARIANT_NO_SHIA });
           continue;
         }
-        expanded.push({ ...cue, timeline_variant: normalizeTimelineVariant(phase, rawVariant) });
+        expanded.push({
+          ...cue,
+          boss_id: bossId,
+          timeline_variant: normalizeTimelineVariant(phase, rawVariant),
+        });
       }
       data.timeline = expanded;
       return data;
@@ -939,7 +1098,8 @@
     }
 
     function cueMatchesEditorVariant(cue) {
-      return cue.phase !== "P1" || cueTimelineVariant(cue) === editorTimelineVariant("P1");
+      return cueBossId(cue) === editorState.bossId
+        && (cue.phase !== "P1" || cueTimelineVariant(cue) === editorTimelineVariant("P1"));
     }
 
     function rebuildTimelineByPhase() {
@@ -949,6 +1109,7 @@
         state.timelineByPhase[phase] = state.assets.timeline
           .filter((cue) => cue.enabled
             && !cue.deleted
+            && cueBossId(cue) === state.bossId
             && cue.phase === phase
             && cueTimelineVariant(cue) === variant)
           .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
@@ -957,6 +1118,77 @@
 
     function selectedTimelineCueCount() {
       return PHASE_ORDER.reduce((total, phase) => total + (state.timelineByPhase[phase] || []).length, 0);
+    }
+
+    function initialEditorUrlForBoss() {
+      const key = editorYoutubeStorageKey();
+      const stored = localStorage.getItem(key) || "";
+      const storedId = parseYoutubeVideoId(stored);
+      if (state.bossId === "black_mage"
+          && (!storedId || LEGACY_EDITOR_BASELINE_IDS.has(storedId))) {
+        localStorage.setItem(key, defaultEditorYoutubeUrl());
+        return defaultEditorYoutubeUrl();
+      }
+      return storedId ? stored : defaultEditorYoutubeUrl();
+    }
+
+    function setBossSidebarOpen(open) {
+      const expanded = Boolean(open);
+      document.body.classList.toggle("boss-sidebar-open", expanded);
+      els.bossSidebar.setAttribute("aria-hidden", String(!expanded));
+      els.bossMenuBtn.setAttribute("aria-expanded", String(expanded));
+    }
+
+    function renderBossChrome() {
+      const profile = activeBossProfile();
+      document.title = appTitle();
+      els.bossTitle.textContent = profile.name;
+      els.bossChoices.innerHTML = Object.values(BOSS_PROFILES).map((boss) => `
+        <button class="bossChoice ${boss.id === state.bossId ? "active" : ""}"
+          data-boss-id="${boss.id}" aria-current="${boss.id === state.bossId ? "true" : "false"}">
+          ${boss.name}
+        </button>
+      `).join("");
+      els.manualPhaseButtons.innerHTML = `<span class="muted">手動起算：</span>${PHASE_ORDER.map((phase) => `
+        <button data-manual-phase="${phase}">${phaseDisplayLabel(phase)}</button>
+      `).join("")}`;
+      els.editorPhaseTabs.innerHTML = PHASE_ORDER.map((phase) => `
+        <button data-editor-phase="${phase}">${phaseDisplayLabel(phase, editorTimelineVariant(phase))}</button>
+      `).join("");
+      const showP1Variant = Boolean(profile.p1Variant);
+      els.liveP1VariantToggle.hidden = !showP1Variant;
+      els.editorP1VariantRow.hidden = !showP1Variant || editorState.phase !== "P1";
+    }
+
+    async function selectBoss(bossId) {
+      if (!BOSS_PROFILES[bossId] || bossId === state.bossId) {
+        setBossSidebarOpen(false);
+        return;
+      }
+      if (editorState.dirtyKeys.size) await saveEditorChanges();
+      if (state.running || state.stream || state.activePhase || state.pending || els.video.currentSrc) {
+        stopSource();
+      }
+      editorPause();
+      state.bossId = bossId;
+      editorState.bossId = bossId;
+      PHASE_ORDER = [...BOSS_PROFILES[bossId].phases];
+      localStorage.setItem(BOSS_STORAGE_KEY, bossId);
+      state.timelineByPhase = {};
+      editorState.phase = PHASE_ORDER[0];
+      editorState.hudTimes = {};
+      editorState.phaseMethods = {};
+      renderBossChrome();
+      rebuildTimelineByPhase();
+      initializeEditorData(state.assets);
+      resetRun();
+      const editorUrl = initialEditorUrlForBoss();
+      els.editorYoutubeInput.value = editorUrl;
+      loadEditorYoutube(editorUrl).catch((error) => {
+        els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+      });
+      els.topStatus.textContent = `${activeBossProfile().name} · 語音 ${selectedTimelineCueCount()} 句`;
+      setBossSidebarOpen(false);
     }
 
     function setText(id, text, cls = "") {
@@ -982,6 +1214,7 @@
       const payload = {
         row: {
           session_id: state.sessionId,
+          boss_id: state.bossId,
           source: state.sourceMode,
           event_time: new Date().toISOString(),
           ...row,
@@ -1065,7 +1298,7 @@
         const text = String(change.text || "").trim();
         const startS = Number(change.start_s);
         const leadS = Number(change.lead_s);
-        if (!PHASE_ORDER.includes(phase)
+        if (!ALL_PHASES.has(phase)
             || !Number.isInteger(cueIndex)
             || cueIndex < 1
             || !text
@@ -1079,6 +1312,7 @@
           if (!cue && operation === "delete") continue;
           if (!cue) {
             cue = {
+              boss_id: bossIdForPhase(phase),
               phase,
               timeline_variant: variant,
               cue_index: cueIndex,
@@ -1121,7 +1355,9 @@
 
     function nextAvailableCustomCueIndex(phase, variant, cues) {
       const used = new Set((cues || [])
-        .filter((cue) => cue.phase === phase && cueTimelineVariant(cue) === variant)
+        .filter((cue) => cueBossId(cue) === bossIdForPhase(phase)
+          && cue.phase === phase
+          && cueTimelineVariant(cue) === variant)
         .map((cue) => Number(cue.cue_index))
         .filter((cueIndex) => Number.isInteger(cueIndex) && cueIndex >= 1001));
       let candidate = 1001;
@@ -1146,10 +1382,15 @@
       let changed = false;
       for (const raw of storedCues) {
         const phase = String(raw.phase || "");
+        const bossId = String(raw.boss_id || bossIdForPhase(phase));
         const variant = normalizeTimelineVariant(phase, String(raw.timeline_variant || ""));
         let cueIndex = Number(raw.cue_index);
         const text = String(raw.text || "").trim();
-        if (!PHASE_ORDER.includes(phase) || !Number.isInteger(cueIndex) || cueIndex < 1001 || !text) {
+        if (!ALL_PHASES.has(phase)
+            || !BOSS_PROFILES[bossId]?.phases.includes(phase)
+            || !Number.isInteger(cueIndex)
+            || cueIndex < 1001
+            || !text) {
           changed = true;
           continue;
         }
@@ -1168,6 +1409,7 @@
         }
         const cue = {
           ...raw,
+          boss_id: bossId,
           phase,
           timeline_variant: variant,
           cue_index: cueIndex,
@@ -1312,12 +1554,26 @@
       return PHASE_ORDER[state.expectedIndex] || "-";
     }
 
+    function advanceExpectedPhase(phase) {
+      const index = PHASE_ORDER.indexOf(phase);
+      if (index < 0) return;
+      if (state.bossId === "seren") {
+        state.expectedIndex = phase === "S_P1"
+          ? PHASE_ORDER.indexOf("S_NOON")
+          : index === PHASE_ORDER.length - 1
+            ? PHASE_ORDER.indexOf("S_NOON")
+            : index + 1;
+        return;
+      }
+      state.expectedIndex = Math.max(state.expectedIndex, index + 1);
+    }
+
     function renderPhaseCards() {
       els.phaseCards.innerHTML = PHASE_ORDER.map((phase) => {
         const count = (state.timelineByPhase[phase] || []).length;
         const played = [...state.playedKeys].filter((key) => key.startsWith(`${phase}:`)).length;
         const active = phase === state.activePhase ? "active" : "";
-        const detected = state.expectedIndex > PHASE_ORDER.indexOf(phase) ? "detected" : "";
+        const detected = state.visitedPhases.has(phase) && phase !== state.activePhase ? "detected" : "";
         return `<div class="phaseCard ${active} ${detected}">
           <strong>${phaseDisplayLabel(phase)}</strong>
           <span>${played}/${count} 句</span>
@@ -1336,7 +1592,7 @@
         const played = state.playedKeys.has(key) ? "played" : "";
         const next = index === state.cueIndex ? "next" : "";
         return `<div class="cueRow ${played} ${next}">
-          <span>${cue.phase}#${cue.cue_index}</span>
+          <span>${phaseDisplayLabel(cue.phase, cueTimelineVariant(cue))}#${cue.cue_index}</span>
           <span>${fmt(effectiveScheduledS(cue))}</span>
           <span>${escapeHtml(cue.text || "")}</span>
         </div>`;
@@ -1361,19 +1617,21 @@
       state.activeCues = [];
       state.cueIndex = 0;
       state.playedKeys = new Set();
+      state.visitedPhases = new Set();
       state.pending = null;
       state.confirm = null;
       state.currentCue = null;
       state.currentCueUntilMs = 0;
       resetP1HudFallback();
       resetTransitionFallback();
+      resetSerenDetection();
       state.lastScanTelemetryMs = 0;
       state.contentRectLock = null;
       state.lastWideSearchMs = 0;
-      setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
+      setText("status", `等待 ${phaseDisplayLabel(PHASE_ORDER[0])} 過場`, "ok");
       setText("phase", "-");
       setText("phaseTime", "--:--.---");
-      setText("expected", "P1");
+      setText("expected", phaseDisplayLabel(PHASE_ORDER[0]));
       setText("score", "-");
       setText("hud", "-");
       els.calloutNow.textContent = "現在：-";
@@ -1381,7 +1639,7 @@
       renderPhaseCards();
       renderTimeline();
       postEvent({ event_type: "reset", phase: "" });
-      log(`重置：等待 ${phaseDisplayLabel("P1")} 過場`, "warnText");
+      log(`重置：等待 ${phaseDisplayLabel(PHASE_ORDER[0])} 過場`, "warnText");
     }
 
     function stopAllAudio() {
@@ -1423,8 +1681,10 @@
       state.confirm = null;
       state.currentCue = null;
       state.currentCueUntilMs = 0;
+      state.visitedPhases = new Set();
       resetP1HudFallback();
       resetTransitionFallback();
+      resetSerenDetection();
       state.contentRectLock = null;
       state.lastWideSearchMs = 0;
       state.expectedIndex = PHASE_ORDER.length;
@@ -1618,7 +1878,8 @@
     }
 
     async function testVoice() {
-      const cue = state.assets?.timeline?.find((item) => item.enabled && item.clip_url);
+      const cue = state.assets?.timeline?.find((item) =>
+        cueBossId(item) === state.bossId && item.enabled && !item.deleted);
       if (!cue) {
         log("沒有可用語音", "badText");
         return;
@@ -1891,6 +2152,18 @@
         boss: { left: profile.width * 0.28, top: 0, right: profile.width * 0.72, bottom: profile.height * 0.12 },
         timer: { left: 1430, top: 90, right: 1615, bottom: 190 },
         stage: { left: 700, top: 300, right: 2250, bottom: 1050 },
+        serenBanner: {
+          left: profile.width * 0.30,
+          top: profile.height * 0.20,
+          right: profile.width * 0.70,
+          bottom: profile.height * 0.38,
+        },
+        serenWheel: {
+          left: profile.width * 0.84,
+          top: profile.height * 0.035,
+          right: profile.width * 0.94,
+          bottom: profile.height * 0.22,
+        },
       };
       const crop = crops[kind] || crops.stage;
       const rect = cropRectForVideo(video, crop, baseRect);
@@ -1907,6 +2180,10 @@
       let colorCount = 0;
       let neutralCount = 0;
       let brightCount = 0;
+      let pureWhiteCount = 0;
+      let darkCount = 0;
+      let redCount = 0;
+      let goldCount = 0;
       let graySum = 0;
       for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
         const r = data[i], g = data[i + 1], b = data[i + 2];
@@ -1918,15 +2195,20 @@
         }
         if (s < 70 && v > 145) neutralCount += 1;
         if (v > 155) brightCount += 1;
+        if (s < 50 && v > 220) pureWhiteCount += 1;
+        if (v < 110) darkCount += 1;
+        if ((h <= 16 || h >= 340) && s >= 80 && v >= 80) redCount += 1;
+        if (h >= 16 && h <= 75 && s >= 70 && v >= 100) goldCount += 1;
         gray[p] = 0.299 * r + 0.587 * g + 0.114 * b;
         graySum += gray[p];
       }
       let edgeCount = 0;
+      const edgeThreshold = kind === "serenWheel" ? 14 : 55;
       for (let y = 1; y < height; y += 1) {
         for (let x = 1; x < width; x += 1) {
           const p = y * width + x;
           const diff = Math.abs(gray[p] - gray[p - 1]) + Math.abs(gray[p] - gray[p - width]);
-          if (diff > 55) edgeCount += 1;
+          if (diff > edgeThreshold) edgeCount += 1;
         }
       }
       const count = Math.max(1, width * height);
@@ -1934,6 +2216,10 @@
         color: colorCount / count,
         neutral: neutralCount / count,
         bright: brightCount / count,
+        pureWhite: pureWhiteCount / count,
+        dark: darkCount / count,
+        red: redCount / count,
+        gold: goldCount / count,
         edge: edgeCount / count,
         mean: graySum / count,
       };
@@ -1991,6 +2277,35 @@
       return { visible, ...metrics };
     }
 
+    function readSerenWheelVisible() {
+      if (!state.assets || els.video.readyState < 2) return { visible: false, edge: 0, red: 0 };
+      const metrics = regionMetrics("serenWheel");
+      return {
+        ...metrics,
+        visible: metrics.edge >= 0.058 && metrics.red >= 0.003,
+      };
+    }
+
+    function readSerenFormTransition() {
+      if (!state.assets || els.video.readyState < 2) {
+        return { visible: false, pureWhite: 0, bannerDark: 0 };
+      }
+      const stage = regionMetrics("stage");
+      const banner = regionMetrics("serenBanner");
+      const hud = readHudVisible();
+      return {
+        visible: hud.edge >= 0.06
+          && hud.color >= 0.10
+          && stage.pureWhite >= 0.58
+          && banner.dark >= 0.18,
+        pureWhite: stage.pureWhite,
+        bannerDark: banner.dark,
+        hud,
+        stage,
+        banner,
+      };
+    }
+
     function resetP1HudFallback() {
       state.p1HudFallback = { hiddenSinceMs: 0, lastHiddenMs: 0, visibleCount: 0, firstVisibleMs: 0 };
     }
@@ -2005,6 +2320,119 @@
         firstVisibleMs: 0,
         whiteCount: 0,
       };
+    }
+
+    function resetSerenDetection() {
+      state.serenDetection = {
+        structureHiddenSinceMs: 0,
+        structureHiddenLastMs: 0,
+        visibleCount: 0,
+        firstVisibleMs: 0,
+        wheelCount: 0,
+        firstWheelMs: 0,
+        whiteCount: 0,
+        firstWhiteMs: 0,
+        whiteLastMs: 0,
+        whiteLatched: false,
+        lastTransitionMs: 0,
+      };
+    }
+
+    function updateSerenDetection(now) {
+      const detection = state.serenDetection;
+      const hud = readHudVisible();
+      const player = readPlayerUiVisible();
+      const structureAbsent = hud.edge < 0.025 && player.edge < 0.035;
+
+      if (!state.activePhase) {
+        if (structureAbsent) {
+          if (!detection.structureHiddenSinceMs) detection.structureHiddenSinceMs = now;
+          detection.structureHiddenLastMs = now;
+          detection.visibleCount = 0;
+          detection.firstVisibleMs = 0;
+        } else if (detection.structureHiddenSinceMs
+            && detection.structureHiddenLastMs - detection.structureHiddenSinceMs >= 1500
+            && hud.visible) {
+          if (!detection.visibleCount) detection.firstVisibleMs = now;
+          detection.visibleCount += 1;
+          if (detection.visibleCount >= 3 && now - detection.firstVisibleMs >= 180) {
+            const startMs = detection.firstVisibleMs;
+            startPhase("S_P1", startMs, "auto_seren_hud_return");
+            resetSerenDetection();
+          }
+        } else if (!hud.visible) {
+          detection.visibleCount = 0;
+          detection.firstVisibleMs = 0;
+        }
+        setText("score", `HUD ${hud.edge.toFixed(3)}`, hud.visible ? "ok" : "");
+        return;
+      }
+
+      if (state.activePhase === "S_P1") {
+        if (structureAbsent) {
+          if (!detection.structureHiddenSinceMs) detection.structureHiddenSinceMs = now;
+          detection.structureHiddenLastMs = now;
+          detection.visibleCount = 0;
+          detection.firstVisibleMs = 0;
+          detection.wheelCount = 0;
+          detection.firstWheelMs = 0;
+        } else if (detection.structureHiddenSinceMs
+            && detection.structureHiddenLastMs - detection.structureHiddenSinceMs >= 3000
+            && hud.visible) {
+          if (!detection.visibleCount) detection.firstVisibleMs = now;
+          detection.visibleCount += 1;
+          const wheel = readSerenWheelVisible();
+          if (wheel.visible) {
+            if (!detection.wheelCount) detection.firstWheelMs = now;
+            detection.wheelCount += 1;
+          } else {
+            detection.wheelCount = 0;
+            detection.firstWheelMs = 0;
+          }
+          const wheelConfirmed = detection.wheelCount >= 2 && now - detection.firstWheelMs >= 80;
+          const wheelFallback = detection.visibleCount >= 20 && now - detection.firstVisibleMs >= 1900;
+          setText(
+            "score",
+            `轉輪 ${wheel.edge.toFixed(3)}/${wheel.red.toFixed(3)}`,
+            wheel.visible ? "ok" : "",
+          );
+          if (wheelConfirmed || wheelFallback) {
+            const startMs = wheelConfirmed
+              ? detection.firstWheelMs
+              : detection.firstVisibleMs + 1500;
+            startPhase("S_NOON", startMs, wheelConfirmed ? "auto_seren_wheel" : "auto_seren_wheel_fallback");
+            resetSerenDetection();
+          }
+        }
+        return;
+      }
+
+      const transition = readSerenFormTransition();
+      if (transition.visible && now - detection.lastTransitionMs >= 8000) {
+        if (!detection.whiteCount) detection.firstWhiteMs = now;
+        detection.whiteCount += 1;
+        detection.whiteLastMs = now;
+        if (!detection.whiteLatched
+            && detection.whiteCount >= 3
+            && now - detection.firstWhiteMs >= 180) {
+          const nextPhase = expectedPhase();
+          if (nextPhase !== "-" && nextPhase !== "S_P1") {
+            const startMs = detection.firstWhiteMs;
+            detection.whiteLatched = true;
+            detection.lastTransitionMs = now;
+            startPhase(nextPhase, startMs, "auto_seren_white_transition");
+          }
+        }
+      } else if (!transition.visible && now - detection.whiteLastMs >= 350) {
+        detection.whiteCount = 0;
+        detection.firstWhiteMs = 0;
+        detection.whiteLatched = false;
+      }
+      setText(
+        "score",
+        `轉場 ${transition.pureWhite.toFixed(2)}/${transition.bannerDark.toFixed(2)}`,
+        transition.visible ? "ok" : "",
+      );
     }
 
     function updateP1HudFallback(now, best) {
@@ -2187,7 +2615,7 @@
       canvas.height = detector.match_height;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       let count = 0;
-      for (const phase of PHASE_ORDER) {
+      for (const phase of BOSS_PROFILES.black_mage.phases) {
         state.templatesByPhase[phase] = [];
         for (const item of state.assets.phases[phase]?.templates || []) {
           if (item.usable === false) continue;
@@ -2214,6 +2642,7 @@
         data.baseline_replay = { ...data.baseline_replay, available: false, url: "" };
       }
       expandTimelineVariants(data);
+      state.assets = data;
       state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
       try {
         const publishedChanges = await loadPublishedTimelineChanges();
@@ -2228,15 +2657,10 @@
       editorState.customSkillTexts = new Set(readStoredCustomSkills());
       state.p1HasShia = localStorage.getItem(P1_VARIANT_KEY) !== "false";
       editorState.p1HasShia = state.p1HasShia;
-      state.assets = data;
-      const storedEditorYoutube = localStorage.getItem(EDITOR_YOUTUBE_KEY) || "";
-      const storedEditorYoutubeId = parseYoutubeVideoId(storedEditorYoutube);
-      const initialEditorYoutube = !storedEditorYoutubeId || LEGACY_EDITOR_BASELINE_IDS.has(storedEditorYoutubeId)
-        ? DEFAULT_EDITOR_YOUTUBE_URL
-        : storedEditorYoutube;
-      if (initialEditorYoutube !== storedEditorYoutube) {
-        localStorage.setItem(EDITOR_YOUTUBE_KEY, initialEditorYoutube);
-      }
+      editorState.bossId = state.bossId;
+      PHASE_ORDER = [...activeBossProfile().phases];
+      renderBossChrome();
+      const initialEditorYoutube = initialEditorUrlForBoss();
       els.editorYoutubeInput.value = initialEditorYoutube;
       initializeEditorData(data);
       loadEditorYoutube(els.editorYoutubeInput.value).catch((error) => {
@@ -2260,8 +2684,8 @@
       els.editorP1ShiaInput.checked = editorState.p1HasShia;
       els.editorVoiceInput.checked = editorState.voiceEnabled;
       els.volumeText.textContent = `${Math.round(state.volume * 100)}%`;
-      setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
-      els.topStatus.textContent = `模板 ${count}，語音 ${selectedTimelineCueCount()} 句`;
+      setText("status", `等待 ${phaseDisplayLabel(PHASE_ORDER[0])} 過場`, "ok");
+      els.topStatus.textContent = `${activeBossProfile().name} · 模板 ${count}，語音 ${selectedTimelineCueCount()} 句`;
       renderPhaseCards();
       renderTimeline();
       els.editorBaselineBtn.hidden = true;
@@ -2296,7 +2720,12 @@
     }
 
     function scan(now) {
-      if (!state.assets || !videoReady() || state.pending || expectedPhase() === "-") return;
+      if (!state.assets || !videoReady()) return;
+      if (activeBossProfile().detector === "seren") {
+        updateSerenDetection(now);
+        return;
+      }
+      if (state.pending || expectedPhase() === "-") return;
       if (!state.contentRectLock && contentRectCandidates().length > 1) {
         if (now - state.lastWideSearchMs < 200) return;
         state.lastWideSearchMs = now;
@@ -2389,12 +2818,13 @@
         if (key.startsWith(`${phase}:`)) state.playedKeys.delete(key);
       }
       state.activePhase = phase;
+      state.visitedPhases.add(phase);
       state.phaseStartMs = startMs;
       state.pending = null;
       state.activeCues = [...(state.timelineByPhase[phase] || [])]
         .sort((a, b) => effectiveScheduledS(a) - effectiveScheduledS(b) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
       state.cueIndex = 0;
-      state.expectedIndex = Math.max(state.expectedIndex, PHASE_ORDER.indexOf(phase) + 1);
+      advanceExpectedPhase(phase);
       state.currentCue = null;
       state.currentCueUntilMs = 0;
       const phaseLabel = phaseDisplayLabel(phase);
@@ -2464,7 +2894,7 @@
         setText("phaseTime", fmt((now - state.phaseStartMs) / 1000), "ok");
         updateNextCallout(now);
       }
-      setText("expected", expectedPhase());
+      setText("expected", expectedPhase() === "-" ? "-" : phaseDisplayLabel(expectedPhase()));
     }
 
     async function waitForVideoReady() {
@@ -2516,7 +2946,7 @@
         state.running = true;
         els.placeholder.style.display = "none";
         resetRun();
-        setText("status", `等待 ${phaseDisplayLabel("P1")} 過場`, "ok");
+        setText("status", `等待 ${phaseDisplayLabel(PHASE_ORDER[0])} 過場`, "ok");
         log("畫面分享已開始", "ok");
         postEvent({ event_type: "screen_share_start", phase: "" });
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
@@ -2530,11 +2960,13 @@
 
     async function startBaseline() {
       try {
+        const replay = activeBaselineReplay();
+        if (!replay?.available || !replay.url) throw new Error("這個王沒有本機基準影片");
         stopSource();
         startAudioLoading();
         state.sourceMode = "baseline";
         els.video.srcObject = null;
-        els.video.src = state.assets.baseline_replay.url;
+        els.video.src = replay.url;
         els.video.muted = false;
         els.video.controls = true;
         els.video.autoplay = true;
@@ -2575,11 +3007,13 @@
 
     async function runSelfTest() {
       try {
+        if (state.bossId !== "black_mage") throw new Error("此自測僅供黑魔法師使用");
+        const replay = activeBaselineReplay();
         stopSource();
         state.sourceMode = "selftest";
         state.selfTesting = true;
         els.video.srcObject = null;
-        els.video.src = state.assets.baseline_replay.url;
+        els.video.src = replay.url;
         els.video.muted = true;
         els.video.controls = false;
         els.video.load();
@@ -2589,7 +3023,7 @@
         const results = [];
         for (let index = 0; index < PHASE_ORDER.length; index += 1) {
           const phase = PHASE_ORDER[index];
-          const hint = state.assets.baseline_replay?.phase_hints?.[phase] || {};
+          const hint = replay?.phase_hints?.[phase] || {};
           const probeS = Number(hint.matched_video_s || (Number(hint.cutscene_start_s || 0) + 2));
           state.expectedIndex = index;
           await seekVideo(probeS);
@@ -2664,7 +3098,10 @@
 
     function toggleEditorCueSelection(key) {
       const cue = editorCueByKey(key);
-      if (!cue || cue.phase !== editorState.phase || cueTimelineVariant(cue) !== editorTimelineVariant()) return;
+      if (!cue
+          || cueBossId(cue) !== editorState.bossId
+          || cue.phase !== editorState.phase
+          || cueTimelineVariant(cue) !== editorTimelineVariant()) return;
       if (editorState.selectedKeys.has(key)) {
         editorState.selectedKeys.delete(key);
         if (editorState.selectedKey === key) {
@@ -2683,7 +3120,8 @@
 
     function editorPhaseCues() {
       return editorState.cues
-        .filter((cue) => cue.phase === editorState.phase
+        .filter((cue) => cueBossId(cue) === editorState.bossId
+          && cue.phase === editorState.phase
           && cueTimelineVariant(cue) === editorTimelineVariant()
           && !cue.deleted)
         .sort((a, b) => Number(a.start_s || 0) - Number(b.start_s || 0) || Number(a.cue_index || 0) - Number(b.cue_index || 0));
@@ -2712,7 +3150,7 @@
       editorState.voiceArmedAtS = Number.NaN;
       editorState.playbackCueKey = "";
       editorState.playbackPhase = "";
-      editorState.phase = PHASE_ORDER.includes(previousPhase) ? previousPhase : "P1";
+      editorState.phase = PHASE_ORDER.includes(previousPhase) ? previousPhase : PHASE_ORDER[0];
       editorState.hudTimes = {};
       for (const phase of PHASE_ORDER) {
         if (preserveAlignment && Number.isFinite(previousHudTimes[phase])) {
@@ -2721,6 +3159,7 @@
       }
       const previousCue = editorCueByKey(previousSelected);
       const selectedKey = previousCue
+          && cueBossId(previousCue) === editorState.bossId
           && previousCue.phase === editorState.phase
           && cueTimelineVariant(previousCue) === editorTimelineVariant()
         ? previousSelected
@@ -2833,7 +3272,7 @@
 
     function editorUsesBaselineYoutube() {
       return editorUsesYoutube()
-        && editorState.youtubeVideoId === parseYoutubeVideoId(DEFAULT_EDITOR_YOUTUBE_URL);
+        && editorState.youtubeVideoId === parseYoutubeVideoId(defaultEditorYoutubeUrl());
     }
 
     function editorHasSource() {
@@ -2976,13 +3415,14 @@
     }
 
     function loadEditorBaseline() {
+      const replay = activeBaselineReplay();
       editorPause();
       stopPendingEditorCapture();
       editorState.autoDetectAfterYoutubeReady = false;
       editorState.sourceMode = "baseline";
       destroyEditorYoutubePlayer();
       setEditorSourceSurface("baseline");
-      if (!state.assets?.baseline_replay?.available) {
+      if (!replay?.available || !replay.url) {
         editorState.sourceMode = "";
         clearEditorPhaseAnchors("找不到基準影片");
         els.editorVideo.removeAttribute("src");
@@ -2992,9 +3432,9 @@
         return;
       }
       clearEditorPhaseAnchors("載入後由畫面偵測");
-      els.editorVideo.src = state.assets.baseline_replay.url;
+      els.editorVideo.src = replay.url;
       els.editorVideo.load();
-      editorState.sourceName = state.assets.baseline_replay.name || "-O4WH-sTv4w - 拳霸老黑.mp4";
+      editorState.sourceName = replay.name || "基準影片";
       els.editorVideoName.textContent = editorState.sourceName;
     }
 
@@ -3016,8 +3456,10 @@
       setEditorSourceSurface("youtube");
       editorState.youtubeVideoId = videoId;
       editorState.youtubeUrl = `https://youtu.be/${videoId}`;
-      editorState.sourceName = `YouTube · ${videoId}`;
-      localStorage.setItem(EDITOR_YOUTUBE_KEY, editorState.youtubeUrl);
+      editorState.sourceName = videoId === parseYoutubeVideoId(defaultEditorYoutubeUrl())
+        ? activeBaselineReplay()?.name || `YouTube · ${videoId}`
+        : `YouTube · ${videoId}`;
+      localStorage.setItem(editorYoutubeStorageKey(), editorState.youtubeUrl);
       els.editorYoutubeInput.value = editorState.youtubeUrl;
       els.editorVideoName.textContent = editorState.sourceName;
       clearEditorPhaseAnchors("正在載入 YouTube 播放器");
@@ -3046,7 +3488,7 @@
               if (editorUsesBaselineYoutube()) {
                 editorState.autoDetectAfterYoutubeReady = false;
                 applyEditorPhaseAnchors(
-                  state.assets?.baseline_replay?.phase_hints || {},
+                  activeBaselineReplay()?.phase_hints || {},
                   {},
                   "已套用基準 YouTube 校正",
                 );
@@ -3086,7 +3528,7 @@
 
     function loadEditorYoutubeFromUserAction(rawUrl) {
       const videoId = parseYoutubeVideoId(rawUrl);
-      const baselineId = parseYoutubeVideoId(DEFAULT_EDITOR_YOUTUBE_URL);
+      const baselineId = parseYoutubeVideoId(defaultEditorYoutubeUrl());
       if (videoId && videoId === editorState.youtubeVideoId) {
         if (videoId === baselineId || editorState.detecting
           || Object.keys(editorState.hudTimes).length === PHASE_ORDER.length) {
@@ -3123,13 +3565,13 @@
       editorState.captureEnded = false;
       editorState.titleBeforeScan = document.title;
       document.body.classList.add("youtube-scan-active");
-      document.title = "請分享目前分頁 · 黑魔法師自動校正";
+      document.title = `請分享目前分頁 · ${activeBossProfile().name}自動校正`;
       const pendingRequest = editorState.pendingCaptureRequest;
       editorState.pendingCaptureRequest = null;
       const { stream, error } = await (pendingRequest || requestEditorDisplayMedia());
       if (error || !stream) {
         document.body.classList.remove("youtube-scan-active");
-        document.title = editorState.titleBeforeScan || "黑魔法師招式提示機";
+        document.title = editorState.titleBeforeScan || appTitle();
         throw new Error(error?.name === "NotAllowedError" ? "未分享目前分頁，無法自動校正" : (error?.message || "無法取得分頁畫面"));
       }
       if (token !== editorState.detectionToken) {
@@ -3164,7 +3606,7 @@
       els.editorCaptureVideo.pause();
       els.editorCaptureVideo.srcObject = null;
       document.body.classList.remove("youtube-scan-active");
-      document.title = editorState.titleBeforeScan || "黑魔法師招式提示機";
+      document.title = editorState.titleBeforeScan || appTitle();
       editorState.titleBeforeScan = "";
     }
 
@@ -3206,6 +3648,8 @@
       const timer = regionMetricsForVideo(video, "timer", base);
       const boss = regionMetricsForVideo(video, "boss", base);
       const stage = regionMetricsForVideo(video, "stage", base);
+      const serenBanner = regionMetricsForVideo(video, "serenBanner", base);
+      const serenWheel = regionMetricsForVideo(video, "serenWheel", base);
       const hudCfg = state.assets.detector.hud_visible || {};
       const bossCfg = state.assets.detector.boss_hp_visible || {};
       const hudVisible = hud.color >= Number(hudCfg.skill_color_threshold || 0.15)
@@ -3225,11 +3669,18 @@
         bossVisible,
         structureAbsent,
         stageWhite: stage.mean >= 145 && stage.neutral >= 0.45,
+        serenTransition: hud.edge >= 0.06
+          && hud.color >= 0.10
+          && stage.pureWhite >= 0.58
+          && serenBanner.dark >= 0.18,
+        serenWheelVisible: serenWheel.edge >= 0.058 && serenWheel.red >= 0.003,
         hud,
         player,
         timer,
         boss,
         stage,
+        serenBanner,
+        serenWheel,
       };
     }
 
@@ -3376,6 +3827,186 @@
         }
       }
       return null;
+    }
+
+    async function refineEditorSerenAnchor(kind, startS, endS, token) {
+      const start = Math.max(0, Number(startS || 0));
+      const end = Math.max(start, Number(endS || start));
+      let sawStructureAbsent = false;
+      let firstMatchS = null;
+      let matchCount = 0;
+      const consume = (seconds, signals) => {
+        if (signals.structureAbsent) sawStructureAbsent = true;
+        const matched = kind === "hud"
+          ? sawStructureAbsent && signals.hudVisible
+          : kind === "wheel"
+            ? sawStructureAbsent && signals.hudVisible && signals.serenWheelVisible
+            : signals.serenTransition;
+        if (!matched) {
+          firstMatchS = null;
+          matchCount = 0;
+          return null;
+        }
+        if (firstMatchS === null) firstMatchS = seconds;
+        matchCount += 1;
+        const stableS = kind === "form" ? 0.18 : 0.10;
+        return matchCount >= 3 && seconds - firstMatchS >= stableS
+          ? Number(firstMatchS.toFixed(3))
+          : null;
+      };
+
+      if (editorUsesYoutube()) {
+        if (!await seekEditorDetectionFrame(start, token)) return null;
+        let lastSampleS = Number.NaN;
+        let lastProgressAt = performance.now();
+        editorSetPlaybackRate(1);
+        try { editorState.youtubePlayer.playVideo(); } catch (_) { return null; }
+        try {
+          const deadline = performance.now() + Math.max(7000, (end - start + 4) * 1400);
+          while (performance.now() < deadline) {
+            if (token !== editorState.detectionToken || editorState.captureEnded) return null;
+            await delay(32);
+            const seconds = editorCurrentTime();
+            if (!Number.isFinite(seconds)) continue;
+            if (!Number.isFinite(lastSampleS) || seconds > lastSampleS + 0.012) {
+              lastProgressAt = performance.now();
+            } else if (performance.now() - lastProgressAt > 2500) {
+              return null;
+            }
+            if (Number.isFinite(lastSampleS) && Math.abs(seconds - lastSampleS) < 0.025) continue;
+            lastSampleS = seconds;
+            if (seconds < start - 0.2) continue;
+            if (seconds > end + 0.08) return null;
+            const result = consume(seconds, editorFrameSignals());
+            if (result !== null) return result;
+          }
+        } finally {
+          editorPause();
+        }
+        return null;
+      }
+
+      for (let seconds = start; seconds <= end + 0.0001; seconds += 0.04) {
+        if (!await seekEditorDetectionFrame(seconds, token)) return null;
+        const result = consume(seconds, editorFrameSignals());
+        if (result !== null) return result;
+      }
+      return null;
+    }
+
+    async function scanEditorSerenAnchors(token) {
+      const duration = editorDuration();
+      if (!Number.isFinite(duration) || duration <= 0) throw new Error("影片長度無效");
+      const anchors = {};
+      const methods = {};
+      const coarseStepS = 2;
+      let hiddenStartS = null;
+      let hiddenLastS = null;
+      let consecutiveSeekFailures = 0;
+
+      for (let seconds = 0; seconds < duration && !anchors.S_NOON; seconds += coarseStepS) {
+        if (!await seekEditorDetectionFrame(seconds, token)) {
+          if (token !== editorState.detectionToken || editorState.captureEnded) {
+            throw new Error("階段偵測已取消");
+          }
+          consecutiveSeekFailures += 1;
+          if (consecutiveSeekFailures >= 3) throw new Error("YouTube 連續跳轉失敗，請確認網路後再試一次");
+          continue;
+        }
+        consecutiveSeekFailures = 0;
+        const signals = editorFrameSignals();
+        if (!anchors.S_P1 && seconds <= coarseStepS && signals.hudVisible
+            && (signals.timerVisible || signals.bossVisible)) {
+          anchors.S_P1 = 0;
+          methods.S_P1 = "影片從 P1 開始";
+        }
+        if (signals.structureAbsent) {
+          if (hiddenStartS === null) hiddenStartS = seconds;
+          hiddenLastS = seconds;
+        } else if (hiddenStartS !== null && signals.hudVisible) {
+          const hiddenDurationS = Number(hiddenLastS || hiddenStartS) - hiddenStartS;
+          if (!anchors.S_P1 && hiddenDurationS >= 2) {
+            const refined = await refineEditorSerenAnchor(
+              "hud",
+              Math.max(0, hiddenStartS - coarseStepS),
+              Math.min(duration, seconds + coarseStepS),
+              token,
+            );
+            if (refined !== null) {
+              anchors.S_P1 = refined;
+              methods.S_P1 = "HUD 出現";
+            }
+          } else if (anchors.S_P1 && hiddenDurationS >= 4) {
+            const refined = await refineEditorSerenAnchor(
+              "wheel",
+              Math.max(0, hiddenStartS - coarseStepS),
+              Math.min(duration, seconds + 5),
+              token,
+            );
+            if (refined !== null) {
+              anchors.S_NOON = refined;
+              methods.S_NOON = "正午轉輪啟動";
+              break;
+            }
+          }
+          hiddenStartS = null;
+          hiddenLastS = null;
+        } else if (!signals.structureAbsent) {
+          hiddenStartS = null;
+          hiddenLastS = null;
+        }
+        if (Math.round(seconds / coarseStepS) % 10 === 0) {
+          updateEditorScanProgress(anchors.S_P1 ? "尋找 P2 正午" : "尋找 P1", seconds, duration);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+      }
+
+      if (!anchors.S_NOON) return { anchors, methods };
+      const formPhases = ["S_SUNSET", "S_MIDNIGHT", "S_DAWN"];
+      const minimumDelays = [20, 20, 8];
+      let lastAnchorS = anchors.S_NOON;
+      let lastCandidateS = -100;
+      consecutiveSeekFailures = 0;
+
+      for (let seconds = lastAnchorS + minimumDelays[0];
+          seconds < duration && Object.keys(anchors).length < PHASE_ORDER.length;
+          seconds += 1) {
+        if (!await seekEditorDetectionFrame(seconds, token)) {
+          if (token !== editorState.detectionToken || editorState.captureEnded) {
+            throw new Error("階段偵測已取消");
+          }
+          consecutiveSeekFailures += 1;
+          if (consecutiveSeekFailures >= 3) throw new Error("YouTube 連續跳轉失敗，請確認網路後再試一次");
+          continue;
+        }
+        consecutiveSeekFailures = 0;
+        const nextIndex = formPhases.findIndex((phase) => !Number.isFinite(anchors[phase]));
+        if (nextIndex < 0) break;
+        const minimumS = lastAnchorS + minimumDelays[nextIndex];
+        if (seconds < minimumS) continue;
+        const signals = editorFrameSignals();
+        if (signals.serenTransition && seconds - lastCandidateS >= 5) {
+          lastCandidateS = seconds;
+          const refined = await refineEditorSerenAnchor(
+            "form",
+            Math.max(0, seconds - 1.4),
+            Math.min(duration, seconds + 2.4),
+            token,
+          );
+          if (refined !== null && refined >= minimumS) {
+            const phase = formPhases[nextIndex];
+            anchors[phase] = refined;
+            methods[phase] = "HUD 保留全白轉場";
+            lastAnchorS = refined;
+            seconds = refined + minimumDelays[Math.min(nextIndex + 1, minimumDelays.length - 1)] - 1;
+          }
+        }
+        if (Math.round(seconds) % 12 === 0) {
+          updateEditorScanProgress(phaseDisplayLabel(formPhases[nextIndex]), seconds, duration);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+      }
+      return { anchors, methods };
     }
 
     async function scanEditorPhaseAnchors(token) {
@@ -3603,7 +4234,7 @@
       editorState.hudTimes = anchors;
       editorState.phaseMethods = methods;
       const count = Object.keys(anchors).length;
-      els.editorPhaseStatus.textContent = `${label} ${count}/4`;
+      els.editorPhaseStatus.textContent = `${label} ${count}/${PHASE_ORDER.length}`;
       renderEditor();
       return count;
     }
@@ -3612,7 +4243,7 @@
       if (!state.assets || !editorHasSource() || editorState.detecting) return;
       if (editorState.sourceMode === "baseline" || editorUsesBaselineYoutube()) {
         const count = applyEditorPhaseAnchors(
-          state.assets.baseline_replay?.phase_hints || {},
+          activeBaselineReplay()?.phase_hints || {},
           {},
           editorUsesBaselineYoutube() ? "已套用基準 YouTube 校正" : "已由基準影片畫面偵測",
         );
@@ -3644,7 +4275,9 @@
           await waitForEditorYoutubeDuration(token);
           await primeEditorYoutubeForScan(token);
         }
-        const result = await scanEditorPhaseAnchors(token);
+        const result = activeBossProfile().detector === "seren"
+          ? await scanEditorSerenAnchors(token)
+          : await scanEditorPhaseAnchors(token);
         if (token !== editorState.detectionToken) return;
         const count = applyEditorPhaseAnchors(
           result.anchors,
@@ -3652,7 +4285,7 @@
           scanUsesYoutube ? "YouTube 自動校正完成" : "畫面偵測完成",
         );
         if (count !== PHASE_ORDER.length) {
-          els.editorPhaseStatus.textContent = `畫面偵測 ${count}/4，可手動修正 HUD 時間`;
+          els.editorPhaseStatus.textContent = `畫面偵測 ${count}/${PHASE_ORDER.length}，可手動修正時間`;
         }
       } catch (error) {
         if (token === editorState.detectionToken) {
@@ -3776,9 +4409,10 @@
         els.editorTextInput.value = "";
         return;
       }
+      const cueLabel = phaseDisplayLabel(cue.phase, cueTimelineVariant(cue));
       els.editorSelectedName.textContent = selectedCount > 1
-        ? `已選 ${selectedCount} 招 · ${cue.phase}#${cue.cue_index} ${cue.text}`
-        : `${cue.phase}#${cue.cue_index} ${cue.text}`;
+        ? `已選 ${selectedCount} 招 · ${cueLabel}#${cue.cue_index} ${cue.text}`
+        : `${cueLabel}#${cue.cue_index} ${cue.text}`;
       els.editorTextInput.value = String(cue.text || "");
       els.editorStartInput.value = Number(cue.start_s || 0).toFixed(3);
       els.editorLeadInput.value = Number(cue.lead_s || 0).toFixed(3);
@@ -3792,7 +4426,10 @@
     }
 
     function renderEditorSkillLibrary() {
-      const baseTexts = new Set(state.baseTimeline.map((cue) => String(cue.text || "").trim()).filter(Boolean));
+      const baseTexts = new Set(state.baseTimeline
+        .filter((cue) => cueBossId(cue) === editorState.bossId)
+        .map((cue) => String(cue.text || "").trim())
+        .filter(Boolean));
       const entries = [...new Set([...baseTexts, ...editorState.customSkillTexts])]
         .sort((a, b) => a.localeCompare(b, "zh-TW"));
       els.editorSkillLibrary.innerHTML = entries.map((text) => {
@@ -3817,7 +4454,7 @@
         const dirty = editorState.dirtyKeys.has(key) ? "dirty" : "";
         const enabled = cue.enabled ? "" : "disabledCue";
         return `<button class="editorCueRow ${selected} ${primary} ${playing} ${dirty}" data-editor-key="${escapeHtml(key)}" aria-current="${playing ? "true" : "false"}" aria-pressed="${selected ? "true" : "false"}">
-          <span>${cue.phase}#${cue.cue_index}</span>
+          <span>${phaseDisplayLabel(cue.phase, cueTimelineVariant(cue))}#${cue.cue_index}</span>
           <span>${fmt(Number(cue.start_s || 0))}</span>
           <span class="promptCol">${fmt(editorScheduledS(cue))}</span>
           <span>${escapeHtml(cue.text || "")}</span>
@@ -4011,7 +4648,7 @@
     }
 
     function renderEditor() {
-      els.editorP1VariantRow.hidden = editorState.phase !== "P1";
+      els.editorP1VariantRow.hidden = !activeBossProfile().p1Variant || editorState.phase !== "P1";
       els.editorP1ShiaInput.checked = editorState.p1HasShia;
       for (const button of document.querySelectorAll("[data-editor-phase]")) {
         const phase = button.dataset.editorPhase;
@@ -4020,7 +4657,7 @@
         button.classList.toggle("active", phase === editorState.phase);
         button.textContent = Number.isFinite(anchor) ? `${phaseLabel} ${fmt(anchor)}` : `${phaseLabel} --:--`;
         button.title = Number.isFinite(anchor)
-          ? `${phaseLabel} HUD ${fmt(anchor)} · ${editorState.phaseMethods[phase] || "手動"}`
+          ? `${phaseLabel} 起算 ${fmt(anchor)} · ${editorState.phaseMethods[phase] || "手動"}`
           : `${phaseLabel} 尚未偵測`;
       }
       const selectedHud = editorState.hudTimes[editorState.phase];
@@ -4047,7 +4684,7 @@
     function playEditorCueFromPrompt(cue) {
       const targetS = editorAbsolutePromptS(cue);
       if (!Number.isFinite(targetS)) {
-        setEditorStatus(`${cue.phase} 尚未校正 HUD 時間`, "dirty");
+        setEditorStatus(`${phaseDisplayLabel(cue.phase)} 尚未校正起算時間`, "dirty");
         return;
       }
       const key = editorCueKey(cue);
@@ -4098,9 +4735,9 @@
       resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
       if (Number.isFinite(anchorS)) {
         seekEditorVideo(anchorS);
-        els.editorPhaseStatus.textContent = `${phase} 已跳到 HUD ${fmt(anchorS)}`;
+        els.editorPhaseStatus.textContent = `${phaseDisplayLabel(phase)} 已跳到起算點 ${fmt(anchorS)}`;
       } else {
-        els.editorPhaseStatus.textContent = `${phase} 尚未校正 HUD 時間`;
+        els.editorPhaseStatus.textContent = `${phaseDisplayLabel(phase)} 尚未校正起算時間`;
       }
       renderEditor();
       if (editorState.selectedKey) scrollEditorCueIntoView(editorState.selectedKey);
@@ -4143,7 +4780,7 @@
       }
       const hudS = Number(editorState.hudTimes[editorState.phase]);
       if (!Number.isFinite(hudS)) {
-        setEditorStatus(`請先設定 ${editorState.phase} HUD 時間`, "dirty");
+        setEditorStatus(`請先設定 ${phaseDisplayLabel(editorState.phase)} 起算時間`, "dirty");
         return;
       }
       const startS = editorCurrentTime() - hudS;
@@ -4152,6 +4789,7 @@
         return;
       }
       const cue = {
+        boss_id: editorState.bossId,
         phase: editorState.phase,
         timeline_variant: editorTimelineVariant(),
         cue_index: nextCustomCueIndex(editorState.phase),
@@ -4425,7 +5063,7 @@
       state.assets = data;
       rebuildTimelineByPhase();
       initializeEditorData(data, preserveAlignment);
-      els.topStatus.textContent = `模板 ${data.template_count}，語音 ${selectedTimelineCueCount()} 句`;
+      els.topStatus.textContent = `${activeBossProfile().name} · 模板 ${data.template_count}，語音 ${selectedTimelineCueCount()} 句`;
     }
 
     async function saveEditorChanges() {
@@ -4434,6 +5072,7 @@
       const changes = [...editorState.dirtyKeys].map((key) => {
         const cue = editorCueByKey(key);
         return {
+          boss_id: cueBossId(cue),
           phase: cue.phase,
           timeline_variant: cueTimelineVariant(cue),
           cue_index: cue.cue_index,
@@ -4493,8 +5132,12 @@
     }
 
     function collectFeedbackChanges() {
-      const baseByKey = new Map(state.baseTimeline.map((cue) => [editorCueKey(cue), cue]));
-      const currentByKey = new Map(editorState.cues.map((cue) => [editorCueKey(cue), cue]));
+      const baseByKey = new Map(state.baseTimeline
+        .filter((cue) => cueBossId(cue) === editorState.bossId)
+        .map((cue) => [editorCueKey(cue), cue]));
+      const currentByKey = new Map(editorState.cues
+        .filter((cue) => cueBossId(cue) === editorState.bossId)
+        .map((cue) => [editorCueKey(cue), cue]));
       const changes = [];
       for (const [key, base] of baseByKey) {
         const cue = currentByKey.get(key) || base;
@@ -4513,6 +5156,7 @@
         if (!changed) continue;
         changes.push({
           operation: cue.deleted ? "delete" : "update",
+          boss_id: editorState.bossId,
           phase: base.phase,
           timeline_variant: cueTimelineVariant(base),
           cue_index: Number(base.cue_index),
@@ -4526,9 +5170,11 @@
           enabled,
         });
       }
-      for (const cue of editorState.cues.filter((item) => item.custom && !item.deleted)) {
+      for (const cue of editorState.cues.filter((item) =>
+        cueBossId(item) === editorState.bossId && item.custom && !item.deleted)) {
         changes.push({
           operation: "add",
+          boss_id: editorState.bossId,
           phase: cue.phase,
           timeline_variant: cueTimelineVariant(cue),
           cue_index: Number(cue.cue_index),
@@ -4567,7 +5213,7 @@
         .filter((change) => change.phase === "P1")
         .map((change) => timelineVariantLabel(change.timeline_variant)))];
       const variantSummary = p1Variants.length ? ` · P1 ${p1Variants.join("、")}` : "";
-      els.feedbackSummary.textContent = `${changes.length} 則招式調整${variantSummary}`;
+      els.feedbackSummary.textContent = `${activeBossProfile().name} · ${changes.length} 則招式調整${variantSummary}`;
       els.feedbackStatus.textContent = "";
       els.feedbackDialog.showModal();
     }
@@ -4589,11 +5235,14 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            boss_id: editorState.bossId,
             reporter_name: reporterName,
             note: String(els.feedbackNote.value || "").trim(),
             video_name: editorState.sourceName,
             video_duration_s: editorDuration(),
-            p1_variant: editorTimelineVariant("P1"),
+            p1_variant: editorState.bossId === "black_mage"
+              ? editorTimelineVariant("P1")
+              : P1_VARIANT_SHIA,
             phase_anchors: phaseAnchors,
             changes,
           }),
@@ -4694,6 +5343,16 @@
     function bindEvents() {
       document.addEventListener("pointerdown", primeAudioFromGesture, { capture: true });
       document.addEventListener("keydown", primeAudioFromGesture, { capture: true });
+      els.bossMenuBtn.addEventListener("click", () => setBossSidebarOpen(true));
+      els.bossMenuCloseBtn.addEventListener("click", () => setBossSidebarOpen(false));
+      els.bossBackdrop.addEventListener("click", () => setBossSidebarOpen(false));
+      els.bossChoices.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-boss-id]");
+        if (!button) return;
+        selectBoss(button.dataset.bossId).catch((error) => {
+          setEditorStatus(`切換失敗：${error.message}`, "dirty");
+        });
+      });
       els.liveModeBtn.addEventListener("click", () => setAppMode("live"));
       els.editorModeBtn.addEventListener("click", () => setAppMode("editor"));
       els.prompterFocusBtn.addEventListener("click", togglePrompterFocus);
@@ -4756,13 +5415,14 @@
       for (const button of document.querySelectorAll("[data-editor-seek]")) {
         button.addEventListener("click", () => editorSeekBy(Number(button.dataset.editorSeek || 0)));
       }
-      for (const button of document.querySelectorAll("[data-editor-phase]")) {
-        button.addEventListener("click", () => selectEditorPhase(button.dataset.editorPhase));
-      }
+      els.editorPhaseTabs.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-editor-phase]");
+        if (button) selectEditorPhase(button.dataset.editorPhase);
+      });
       els.editorSetHudBtn.addEventListener("click", () => {
         editorState.hudTimes[editorState.phase] = editorCurrentTime();
         editorState.phaseMethods[editorState.phase] = "manual";
-        els.editorPhaseStatus.textContent = `${editorState.phase} 已手動修正`;
+        els.editorPhaseStatus.textContent = `${phaseDisplayLabel(editorState.phase)} 已手動修正`;
         resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
         renderEditor();
       });
@@ -4772,7 +5432,7 @@
         if (Number.isFinite(value) && value >= 0) {
           editorState.hudTimes[editorState.phase] = value;
           editorState.phaseMethods[editorState.phase] = "manual";
-          els.editorPhaseStatus.textContent = `${editorState.phase} 已手動修正`;
+          els.editorPhaseStatus.textContent = `${phaseDisplayLabel(editorState.phase)} 已手動修正`;
           resetEditorVoicePlayback({ stopAudio: true, clearPlayed: true });
         }
         renderEditor();
@@ -4842,9 +5502,10 @@
       els.editorReloadBtn.addEventListener("click", () => {
         refreshTimelineFromServer(true).catch((error) => setEditorStatus(`重新載入失敗：${error.message}`, "dirty"));
       });
-      for (const button of document.querySelectorAll("[data-manual-phase]")) {
-        button.addEventListener("click", () => manualStart(button.dataset.manualPhase));
-      }
+      els.manualPhaseButtons.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-manual-phase]");
+        if (button) manualStart(button.dataset.manualPhase);
+      });
       document.addEventListener("keydown", (event) => {
         if (event.key === "F8") {
           event.preventDefault();
