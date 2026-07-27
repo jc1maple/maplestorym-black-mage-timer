@@ -767,8 +767,8 @@
   <main id="editorView" class="editorView">
     <section>
       <div class="editorToolbar">
-        <button id="editorBaselineBtn" class="primary" hidden>載入基準影片</button>
         <input id="editorYoutubeInput" class="youtubeUrlInput" type="url" inputmode="url" value="https://youtu.be/UxH_aFs8aa0" aria-label="YouTube 影片網址" placeholder="貼上 YouTube 影片網址">
+        <button id="editorBaselineBtn" title="載入目前王的預設校對影片">預設影片</button>
         <button id="editorYoutubeBtn" hidden>載入 YouTube</button>
         <button id="editorDetectPhasesBtn" hidden>自動校正階段</button>
         <span id="editorVideoName" class="muted">尚未載入影片</span>
@@ -877,7 +877,7 @@
       },
       seren: {
         id: "seren",
-        name: "賽連",
+        name: "賽蓮",
         detector: "seren",
         phases: ["S_P1", "S_NOON", "S_SUNSET", "S_MIDNIGHT", "S_DAWN"],
         phaseLabels: {
@@ -1160,12 +1160,18 @@
       const key = editorYoutubeStorageKey();
       const stored = localStorage.getItem(key) || "";
       const storedId = parseYoutubeVideoId(stored);
-      if (state.bossId === "black_mage"
-          && (!storedId || LEGACY_EDITOR_BASELINE_IDS.has(storedId))) {
+      const currentDefaultId = parseYoutubeVideoId(defaultEditorYoutubeUrl());
+      const belongsToAnotherBoss = Object.values(BOSS_PROFILES).some((profile) => (
+        profile.id !== state.bossId
+        && parseYoutubeVideoId(profile.defaultEditorYoutubeUrl) === storedId
+      ));
+      if (!storedId
+          || belongsToAnotherBoss
+          || (state.bossId === "black_mage" && LEGACY_EDITOR_BASELINE_IDS.has(storedId))) {
         localStorage.setItem(key, defaultEditorYoutubeUrl());
         return defaultEditorYoutubeUrl();
       }
-      return storedId ? stored : defaultEditorYoutubeUrl();
+      return storedId === currentDefaultId ? defaultEditorYoutubeUrl() : stored;
     }
 
     function setBossSidebarOpen(open) {
@@ -1218,7 +1224,8 @@
       rebuildTimelineByPhase();
       initializeEditorData(state.assets);
       resetRun();
-      const editorUrl = initialEditorUrlForBoss();
+      const editorUrl = defaultEditorYoutubeUrl();
+      localStorage.setItem(editorYoutubeStorageKey(), editorUrl);
       els.editorYoutubeInput.value = editorUrl;
       loadEditorYoutube(editorUrl).catch((error) => {
         els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
@@ -2724,7 +2731,6 @@
       els.topStatus.textContent = `${activeBossProfile().name} · 模板 ${count}，語音 ${selectedTimelineCueCount()} 句`;
       renderPhaseCards();
       renderTimeline();
-      els.editorBaselineBtn.hidden = true;
       updateAudioStatus();
       startTicker();
       log(`載入完成：模板 ${count}，提示 ${selectedTimelineCueCount()} 句`, "ok");
@@ -3451,27 +3457,12 @@
     }
 
     function loadEditorBaseline() {
-      const replay = activeBaselineReplay();
-      editorPause();
-      stopPendingEditorCapture();
-      editorState.autoDetectAfterYoutubeReady = false;
-      editorState.sourceMode = "baseline";
-      destroyEditorYoutubePlayer();
-      setEditorSourceSurface("baseline");
-      if (!replay?.available || !replay.url) {
-        editorState.sourceMode = "";
-        clearEditorPhaseAnchors("找不到基準影片");
-        els.editorVideo.removeAttribute("src");
-        els.editorVideo.load();
-        editorState.sourceName = "";
-        els.editorVideoName.textContent = "請貼上 YouTube 影片網址";
-        return;
-      }
-      clearEditorPhaseAnchors("載入後由畫面偵測");
-      els.editorVideo.src = replay.url;
-      els.editorVideo.load();
-      editorState.sourceName = replay.name || "基準影片";
-      els.editorVideoName.textContent = editorState.sourceName;
+      const editorUrl = defaultEditorYoutubeUrl();
+      localStorage.setItem(editorYoutubeStorageKey(), editorUrl);
+      els.editorYoutubeInput.value = editorUrl;
+      return loadEditorYoutube(editorUrl).catch((error) => {
+        els.editorPhaseStatus.textContent = `YouTube 載入失敗：${error.message}`;
+      });
     }
 
     async function loadEditorYoutube(rawUrl, { autoDetect = false, captureRequest = null } = {}) {
