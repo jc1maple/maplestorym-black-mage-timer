@@ -4951,6 +4951,17 @@
       return Number.isFinite(hudS) ? hudS + editorScheduledS(cue) : Number.NaN;
     }
 
+    function editorCueIsInsidePhaseWindow(cue, absoluteS) {
+      const phaseIndex = PHASE_ORDER.indexOf(cue.phase);
+      const phaseStartS = Number(editorState.hudTimes[cue.phase]);
+      if (phaseIndex < 0 || !Number.isFinite(phaseStartS) || absoluteS < phaseStartS - 0.001) return false;
+      for (let index = phaseIndex + 1; index < PHASE_ORDER.length; index += 1) {
+        const nextPhaseStartS = Number(editorState.hudTimes[PHASE_ORDER[index]]);
+        if (Number.isFinite(nextPhaseStartS)) return absoluteS < nextPhaseStartS - 0.001;
+      }
+      return true;
+    }
+
     async function playEditorVoiceCue(cue, absoluteS, videoS, generation) {
       const played = await playCueAudio(cue, {
         ignoreMuted: true,
@@ -5006,6 +5017,7 @@
           && absoluteS >= previousS - 0.001
           && absoluteS <= currentS + 0.025
           && currentS - absoluteS <= 0.6)
+        .filter(({ cue, absoluteS }) => editorCueIsInsidePhaseWindow(cue, absoluteS))
         .sort((a, b) => a.absoluteS - b.absoluteS || Number(a.cue.cue_index || 0) - Number(b.cue.cue_index || 0));
       for (const item of due) {
         const key = editorCueKey(item.cue);
