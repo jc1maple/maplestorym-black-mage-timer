@@ -1309,6 +1309,8 @@
 
     function voiceCueForText(text) {
       const normalized = String(text || "").trim();
+      const libraryMatch = state.assets?.voice_library?.[normalized];
+      if (libraryMatch?.clip_url) return libraryMatch;
       return state.baseTimeline.find((cue) => String(cue.text || "").trim() === normalized && cue.clip_url) || null;
     }
 
@@ -1316,6 +1318,7 @@
       const match = voiceCueForText(cue.text);
       cue.clip_url = match?.clip_url || "";
       cue.clip_path = match?.clip_path || "";
+      cue.text = String(match?.display_text || cue.text || "").trim();
       cue.tts_text = String(match?.tts_text || "").trim()
         || (String(cue.text || "").trim() === "地刺" ? "第刺" : "");
       cue.duration_s = Number(match?.duration_s || cue.duration_s || Math.max(0.8, String(cue.text || "").length * 0.22));
