@@ -1843,6 +1843,34 @@
       return displayText === "地刺" ? "第刺" : displayText;
     }
 
+    let nativeAudioBridgeSequence = 0;
+
+    function sendAudioManifestToNativeBridge() {
+      const bridge = window.chrome?.webview;
+      if (!bridge || typeof bridge.postMessage !== "function") return false;
+      bridge.postMessage({
+        type: "msm-boss-audio-manifest",
+        version: 1,
+        clip_urls: uniqueAudioCues().map((cue) => staticAssetUrl(cue.clip_url)),
+      });
+      return true;
+    }
+
+    function sendCueToNativeAudioBridge(cue) {
+      const bridge = window.chrome?.webview;
+      if (!bridge || typeof bridge.postMessage !== "function" || !cue.clip_url) return false;
+      bridge.postMessage({
+        type: "msm-boss-audio-cue",
+        version: 1,
+        id: `${Date.now()}-${++nativeAudioBridgeSequence}`,
+        text: String(cue.text || ""),
+        tts_text: cueSpeechText(cue),
+        clip_url: staticAssetUrl(cue.clip_url),
+        volume: Number(state.volume || 1),
+      });
+      return true;
+    }
+
     function speakCueText(cue, shouldStart) {
       if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !shouldStart()) return false;
       const utterance = new SpeechSynthesisUtterance(cueSpeechText(cue));
@@ -1859,6 +1887,7 @@
     async function playCueAudio(cue, { ignoreMuted = false, shouldStart = () => true } = {}) {
       if ((state.audioMuted && !ignoreMuted) || !shouldStart()) return false;
       if (!cue.clip_url) return speakCueText(cue, shouldStart);
+      sendCueToNativeAudioBridge(cue);
       try {
         const webAudioReady = await unlockAudio();
         if ((state.audioMuted && !ignoreMuted) || !shouldStart()) return false;
@@ -2697,6 +2726,7 @@
       state.baseTimeline = (data.timeline || []).map((cue) => ({ ...cue }));
       applyStoredTimelineChanges(data);
       appendStoredCustomCues(data);
+      sendAudioManifestToNativeBridge();
       editorState.customSkillTexts = new Set(readStoredCustomSkills());
       state.p1HasShia = localStorage.getItem(P1_VARIANT_KEY) !== "false";
       editorState.p1HasShia = state.p1HasShia;
