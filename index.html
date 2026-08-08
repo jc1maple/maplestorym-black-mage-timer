@@ -2397,6 +2397,10 @@
       };
     }
 
+    function hasPhaseTransitionTemplateEvidence(phase, score) {
+      return phase === "P4" || Number(score || 0) >= 0.55;
+    }
+
     function resetSerenDetection() {
       state.serenDetection = {
         structureHiddenSinceMs: 0,
@@ -2585,11 +2589,14 @@
       const timer = readCountdownVisible();
       const boss = readBossHpVisible();
       const stage = readStageState();
-      fallback.bestScore = Math.max(fallback.bestScore, Number(best?.score || 0));
-
       const uiStructureAbsent = hud.edge < 0.025 && player.edge < 0.035;
       if (uiStructureAbsent) {
-        if (!fallback.hiddenSinceMs) fallback.hiddenSinceMs = now;
+        if (!fallback.hiddenSinceMs) {
+          fallback.hiddenSinceMs = now;
+          fallback.bestScore = Number(best?.score || 0);
+        } else {
+          fallback.bestScore = Math.max(fallback.bestScore, Number(best?.score || 0));
+        }
         fallback.lastHiddenMs = now;
         fallback.visibleCount = 0;
         fallback.firstVisibleMs = 0;
@@ -2602,8 +2609,10 @@
           fallback.visibleCount += 1;
           if (phase === "P4" && stage.white) fallback.whiteCount += 1;
           const visibleStableMs = now - fallback.firstVisibleMs;
+          const templateEvidence = hasPhaseTransitionTemplateEvidence(phase, fallback.bestScore);
           const confirmed = fallback.visibleCount >= 3
             && visibleStableMs >= 280
+            && templateEvidence
             && (phase !== "P4" || fallback.whiteCount >= 3);
           if (confirmed) {
             const startMs = fallback.firstVisibleMs || now;
@@ -2622,6 +2631,18 @@
             state.confirm = null;
             resetTransitionFallback();
             startPhase(phase, startMs, phase === "P4" ? "auto_white_hud_return" : "auto_hud_return");
+            return;
+          }
+          if (!templateEvidence && visibleStableMs >= 700) {
+            postEvent({
+              event_type: "phase_transition_rejected",
+              phase,
+              reason: "missing_cutscene_template_evidence",
+              best_score: Number(fallback.bestScore.toFixed(6)),
+              hidden_duration_ms: Number(hiddenDurationMs.toFixed(1)),
+            });
+            state.confirm = null;
+            resetTransitionFallback(phase);
             return;
           }
         } else if (now - fallback.lastHiddenMs > 1200) {
